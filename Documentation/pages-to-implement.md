@@ -109,18 +109,7 @@
   * List of uploaded docs with **view/download** buttons.
   * Option to mark student as **verified** or **archive record**.
 
----
 
-### **2.3 Generate Official Document** *(Soon)*
-
-* Form UI:
-
-  * Dropdown: Select document type (COR, TOR, Certificate, etc.).
-  * Text inputs auto-filled with student info.
-  * Preview pane (PDF layout before save).
-* Buttons: **Generate → Save → Link to Student**
-
----
 
 ### **2.4 View Analytics (Business Intelligence)**
 

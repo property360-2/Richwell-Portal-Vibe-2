@@ -1,0 +1,321 @@
+export default App;
+import { useEffect, useMemo, useState } from 'react';
+import { Routes, Route, useNavigate, Navigate, Link } from 'react-router-dom';
+import Button from './components/Button.jsx';
+import LoginForm from './components/LoginForm.jsx';
+import Table from './components/Table.jsx';
+import Alert from './components/Alert.jsx';
+import InputField from './components/InputField.jsx';
+import Sidebar from './components/Sidebar.jsx';
+import StudentDashboard from './pages/student/Dashboard.jsx';
+import { login as apiLogin, logout as apiLogout, fetchProfile, request as apiRequest } from './services/authApi.js';
+
+function useAuth() {
+  const [token, setToken] = useState(() => localStorage.getItem('token'));
+  const [user, setUser] = useState(() => {
+    const raw = localStorage.getItem('user');
+    return raw ? JSON.parse(raw) : null;
+  });
+  const [loading, setLoading] = useState(false);
+
+  async function login(credentials) {
+    setLoading(true);
+    try {
+      const res = await apiLogin(credentials);
+      setToken(res.token);
+      setUser(res.user);
+      localStorage.setItem('token', res.token);
+      localStorage.setItem('user', JSON.stringify(res.user));
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, message: e.message };
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function logout() {
+    try {
+      if (token) await apiLogout(token);
+    } catch (_) {}
+    setToken(null);
+    setUser(null);
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+  }
+
+  async function refreshProfile() {
+    if (!token) return null;
+    try {
+      const data = await fetchProfile(token);
+      setUser(data.user);
+      localStorage.setItem('user', JSON.stringify(data.user));
+      return data.user;
+    } catch (e) {
+      await logout();
+      return null;
+    }
+  }
+
+  return { token, user, loading, login, logout, refreshProfile };
+}
+
+function Protected({ children }) {
+  const token = localStorage.getItem('token');
+  if (!token) return <Navigate to="/login" replace />;
+  return children;
+}
+
+function LoginPage({ onLogin }) {
+  const navigate = useNavigate();
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  async function handleSubmit(values) {
+    setLoading(true);
+    const res = await onLogin(values);
+    setLoading(false);
+    if (res.ok) navigate('/');
+    else setError(res.message || 'Login failed');
+  }
+
+  return (
+    <div className="mx-auto max-w-md py-16">
+      <h1 className="text-center text-2xl font-semibold text-slate-900">Sign in</h1>
+      <p className="mt-2 text-center text-sm text-slate-600">Use a seeded account like student@example.com / ChangeMe123!</p>
+      <div className="mt-8 rounded-xl bg-white p-6 shadow-sm">
+        <LoginForm onSubmit={handleSubmit} loading={loading} error={error} />
+      </div>
+    </div>
+  );
+}
+
+function Header({ user, onLogout }) {
+  return (
+    <header className="bg-white shadow">
+      <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
+        <div>
+          <h1 className="text-lg font-semibold text-slate-900"><Link to={`/${(user?.role || 'student').toLowerCase()}/dashboard`}>Richwell College Portal</Link></h1>
+          <p className="text-xs text-slate-500">Welcome, {user?.firstName} {user?.lastName} ({user?.role})</p>
+        </div>
+        <Button variant="secondary" onClick={onLogout}>Logout</Button>
+      </div>
+    </header>
+  );
+}
+
+function StudentGrades({ token }) {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    setLoading(true);
+    apiRequest('/grades/student/me', { token })
+      .then((res) => setData(res))
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
+  }, [token]);
+  if (error) return <Alert variant="danger">{error}</Alert>;
+  if (!data || loading) return <p className="text-slate-600">Loading grades…</p>;
+
+  const incList = (data.enrollments || [])
+    .flatMap((enr) => enr.subjects)
+    .filter((s) => s.grade?.value === 'INC')
+    .map((s) => `${s.subject.code} – ${s.subject.name}`);
+
+  return (
+    <div className="space-y-4">
+      <Alert variant="info" title="GPA">{data.gpa ?? 'N/A'}</Alert>
+      {incList.length > 0 && (
+        <Alert variant="warning" title="Incomplete (INC) subjects">
+          {incList.join(', ')}
+        </Alert>
+      )}
+      {data.enrollments.map((term, idx) => (
+        <div key={idx} className="space-y-2">
+          <h3 className="text-sm font-semibold text-slate-700">{term.term.schoolYear} – {term.term.semester}</h3>
+          <Table
+            columns={[{ header: 'Code', accessor: 'code' }, { header: 'Subject', accessor: 'name' }, { header: 'Units', accessor: 'units' }, { header: 'Grade', accessor: 'grade' }]}
+            data={term.subjects.map((s) => ({ id: s.subject.id, code: s.subject.code, name: s.subject.name, units: s.subject.units, grade: s.grade?.value ?? '-' }))}
+          />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function RegistrarPanel({ token }) {
+  const [programs, setPrograms] = useState([]);
+  const [subjects, setSubjects] = useState([]);
+  const [professors, setProfessors] = useState([]);
+  const [sections, setSections] = useState([]);
+  const [terms, setTerms] = useState([]);
+  const [pending, setPending] = useState([]);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  // Form states
+  const [progForm, setProgForm] = useState({ code: '', name: '', department: '' });
+  const [subjForm, setSubjForm] = useState({ code: '', name: '', units: 3, subjectType: 'MAJOR', prerequisiteId: '' });
+  const [sectForm, setSectForm] = useState({ name: '', subjectId: '', professorId: '', maxSlots: 40, semester: 'FIRST', academicYear: '2025-2026', schedule: '' });
+  const [sectFormError, setSectFormError] = useState('');
+  const [sectErrors, setSectErrors] = useState({});
+  const [sectTouched, setSectTouched] = useState({});
+  const [subjectProgramFilter, setSubjectProgramFilter] = useState('');
+  const [subjectYearFilter, setSubjectYearFilter] = useState('');
+
+  function validateSection(f) {
+    const e = {};
+    if (!f.name) e.name = 'Required';
+    if (!f.subjectId) e.subjectId = 'Required';
+    if (!f.professorId) e.professorId = 'Required';
+    if (!f.maxSlots || Number(f.maxSlots) <= 0) e.maxSlots = 'Must be a positive number';
+    if (!['FIRST','SECOND','SUMMER'].includes(String(f.semester))) e.semester = 'Invalid';
+    if (!f.academicYear) e.academicYear = 'Required';
+    return e;
+  }
+
+  function onSectChange(field, value) {
+    const next = { ...sectForm, [field]: value };
+    setSectForm(next);
+    setSectTouched((t) => ({ ...t, [field]: true }));
+    setSectErrors(validateSection(next));
+  }
+  const [termForm, setTermForm] = useState({ schoolYear: '2025-2026', semester: 'FIRST', isActive: true });
+
+  async function refreshAll() {
+    setError('');
+    setLoading(true);
+    try {
+      const [p, s, sc, t, pg, profs] = await Promise.all([
+        apiRequest('/registrar/programs', { token }),
+        apiRequest('/registrar/subjects', { token }),
+        apiRequest('/registrar/sections', { token }),
+        apiRequest('/registrar/terms', { token }),
+        apiRequest('/grades/registrar/pending', { token }),
+        apiRequest('/registrar/professors', { token })
+      ]);
+      setPrograms(p.programs || []);
+      setSubjects(s.subjects || []);
+      setSections(sc.sections || []);
+      setTerms(t.terms || []);
+      setPending(pg.pending || []);
+      setProfessors(profs.professors || []);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    refreshAll();
+  }, [token]);
+
+  async function approve(gradeId) {
+    try {
+      await apiRequest(`/grades/registrar/${gradeId}/approve`, { token, method: 'POST' });
+      await refreshAll();
+    } catch (e) {
+      setError(e.message);
+    }
+  }
+
+  if (error) return <Alert variant="danger">{error}</Alert>;
+
+  return (
+    <div className="space-y-8">
+      {loading && <Alert>Loading…</Alert>}
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="space-y-3 rounded-xl bg-white p-4 shadow-sm">
+          <h3 className="text-sm font-semibold text-slate-800">Create Program</h3>
+          <InputField label="Code" value={progForm.code} onChange={(e) => setProgForm({ ...progForm, code: e.target.value })} />
+          <InputField label="Name" value={progForm.name} onChange={(e) => setProgForm({ ...progForm, name: e.target.value })} />
+          <InputField label="Department" value={progForm.department} onChange={(e) => setProgForm({ ...progForm, department: e.target.value })} />
+          <div className="flex justify-end"><Button onClick={async () => { await apiRequest('/registrar/programs', { token, method: 'POST', body: JSON.stringify(progForm) }); setProgForm({ code: '', name: '', department: '' }); await refreshAll(); }}>Save</Button></div>
+        </div>
+
+        <div className="space-y-3 rounded-xl bg-white p-4 shadow-sm">
+          <h3 className="text-sm font-semibold text-slate-800">Create Subject</h3>
+          <InputField label="Code" value={subjForm.code} onChange={(e) => setSubjForm({ ...subjForm, code: e.target.value })} />
+          <InputField label="Name" value={subjForm.name} onChange={(e) => setSubjForm({ ...subjForm, name: e.target.value })} />
+          <InputField label="Units" type="number" value={subjForm.units} onChange={(e) => setSubjForm({ ...subjForm, units: Number(e.target.value) })} />
+          <label className="block text-sm font-medium text-slate-700">Type</label>
+          <select className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" value={subjForm.subjectType} onChange={(e) => setSubjForm({ ...subjForm, subjectType: e.target.value })}>
+            <option value="MAJOR">MAJOR</option>
+            <option value="MINOR">MINOR</option>
+          </select>
+          <InputField label="Prerequisite ID (optional)" type="number" value={subjForm.prerequisiteId} onChange={(e) => setSubjForm({ ...subjForm, prerequisiteId: e.target.value ? Number(e.target.value) : '' })} />
+          <div className="flex justify-end"><Button onClick={async () => { const payload = { ...subjForm, prerequisiteId: subjForm.prerequisiteId || null }; await apiRequest('/registrar/subjects', { token, method: 'POST', body: JSON.stringify(payload) }); setSubjForm({ code: '', name: '', units: 3, subjectType: 'MAJOR', prerequisiteId: '' }); await refreshAll(); }}>Save</Button></div>
+        </div>
+
+        <div className="space-y-3 rounded-xl bg-white p-4 shadow-sm">
+          <h3 className="text-sm font-semibold text-slate-800">Create Section</h3>
+          <InputField label="Name" value={sectForm.name} onChange={(e) => onSectChange('name', e.target.value)} error={sectTouched.name && sectErrors.name ? sectErrors.name : ''} />
+          <div>
+            <label className="block text-sm font-medium text-slate-700">Filter by Program (optional)</label>
+            <select className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" value={subjectProgramFilter} onChange={(e) => setSubjectProgramFilter(e.target.value)}>
+              <option value="">-- All Programs --</option>
+              {programs.map((p) => (
+                <option key={p.id} value={p.id}>{p.code} – {p.name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700">Filter by Recommended Year (optional)</label>
+            <select className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" value={subjectYearFilter} onChange={(e) => setSubjectYearFilter(e.target.value)}>
+              <option value="">-- All Years --</option>
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+              <option value="4">4</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700">Subject</label>
+            <select className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" value={sectForm.subjectId} onChange={(e) => onSectChange('subjectId', Number(e.target.value))}>
+              <option value="">-- Choose --</option>
+              {subjects
+                .filter((sub) => {
+                  if (!subjectProgramFilter) return true;
+                  // subject.programs: ProgramSubject[]
+                  return (sub.programs || []).some((ps) => ps.programId === Number(subjectProgramFilter));
+                })
+                .filter((sub) => {
+                  // optional: show those recommended for selected semester if mapping exists
+                  const sem = sectForm.semester;
+                  const mappings = sub.programs || [];
+                  if (mappings.length === 0) return true;
+                  // if any mapping matches semester or recommendedSemester is null, include
+                  const semOk = mappings.some((ps) => !ps.recommendedSemester || ps.recommendedSemester === sem);
+                  const yearOk = subjectYearFilter ? mappings.some((ps) => ps.recommendedYear === Number(subjectYearFilter)) : true;
+                  return semOk && yearOk;
+                })
+                .map((sub) => (
+                <option key={sub.id} value={sub.id}>{sub.code} – {sub.name}</option>
+              ))}
+            </select>
+            {sectTouched.subjectId && sectErrors.subjectId && <p className="mt-1 text-xs text-rose-500">{sectErrors.subjectId}</p>}
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700">Professor</label>
+            <select className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" value={sectForm.professorId} onChange={(e) => onSectChange('professorId', Number(e.target.value))}>
+              <option value="">-- Choose --</option>
+              {professors.map((pr) => (
+                <option key={pr.id} value={pr.id}>{pr.user.firstName} {pr.user.lastName}</option>
+              ))}
+            </select>
+            {sectTouched.professorId && sectErrors.professorId && <p className="mt-1 text-xs text-rose-500">{sectErrors.professorId}</p>}
+          </div>
+          <InputField label="Max Slots" type="number" value={sectForm.maxSlots} onChange={(e) => onSectChange('maxSlots', Number(e.target.value))} error={sectTouched.maxSlots && sectErrors.maxSlots ? sectErrors.maxSlots : ''} />
+          <label className="block text-sm font-medium text-slate-700">Semester</label>
+          <select className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" value={sectForm.semester} onChange={(e) => onSectChange('semester', e.target.value)}>
+            <option value="FIRST">FIRST</option>
+            <option value="SECOND">SECOND</option>
+            <option value="SUMMER">SUMMER</option>
+          </select>
+          {sectTouched.semester && sectErrors.semester && <p className="mt-1 text-xs text-rose-500">{sectErrors.semester}</p>}
+          <InputField label="Academic Year" value={sectForm.academicYear} onChange={(e) => onSectChange('academicYear', e.target.value)} error={sectTouched.academicYear && sectErrors.academicYear ? sectErrors.academicYear : ''} />
+          <InputField label="Schedule (optional)" value={sectForm.schedule} onChange={(e) => setSectForm({ ...sectForm, schedule: e.target.value })} />
+          {sectFormError && <Alert variant="danger">{sectFormError}</Alert>}
