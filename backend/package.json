@@ -7,10 +7,7 @@
   "scripts": {
     "dev": "nodemon src/server.js",
     "start": "node src/server.js",
-    "lint": "echo \"No linter configured yet\"",
-    "prisma:push": "prisma db push",
-    "prisma:studio": "prisma studio",
-    "seed": "node prisma/seed.js"
+    "lint": "echo \"No linter configured yet\""
   },
   "keywords": [
     "richwell",
@@ -21,12 +18,10 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "@prisma/client": "^5.16.1",
-    "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
-    "jsonwebtoken": "^9.0.2"
+    "@prisma/client": "^5.16.1"
   },
   "devDependencies": {
     "nodemon": "^3.1.0",
