@@ -55,7 +55,24 @@ export const initialPortalData = {
         GE102: "2.00",
         MATH101: "1.75",
       },
-      enrolledSubjects: [],
+      enrolledSubjects: [
+        {
+          code: "MATH201",
+          title: "Discrete Mathematics",
+          units: 3,
+          section: "MATH201-A",
+          schedule: "Tue & Thu 10:30-12:00",
+          professor: "Prof. Chua",
+        },
+        {
+          code: "ComProg1",
+          title: "Computer Programming 1",
+          units: 3,
+          section: "CP1-A",
+          schedule: "Mon & Wed 9:00-10:30",
+          professor: "Prof. Santos",
+        },
+      ],
     },
     {
       id: "231678",
