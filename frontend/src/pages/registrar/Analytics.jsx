@@ -1,15 +1,18 @@
 import { useEffect, useState } from 'react';
-import PropTypes from 'prop-types';
 import Alert from '../../components/Alert.jsx';
 import Table from '../../components/Table.jsx';
-import { request as apiRequest } from '../../services/authApi.js';
+import AnalyticsTile from '../../components/AnalyticsTile.jsx';
+import AppShell from '../../layouts/AppShell.jsx';
+import { useAuth } from '../../context/AuthContext.jsx';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, PieChart, Pie, Cell, Legend } from 'recharts';
 
 const COLORS = ['#4f46e5', '#22c55e', '#f59e0b', '#ef4444', '#06b6d4'];
 
-function RegistrarAnalytics({ token }) {
+function RegistrarAnalytics() {
+  const { token, apiRequest } = useAuth();
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
+
   useEffect(() => {
     Promise.all([
       apiRequest('/registrar/analytics', { token }),
@@ -17,7 +20,7 @@ function RegistrarAnalytics({ token }) {
     ])
       .then(([analytics, summary]) => setData({ analytics, summary }))
       .catch((e) => setError(e.message));
-  }, [token]);
+  }, [apiRequest, token]);
 
   if (error) return <Alert variant="danger">{error}</Alert>;
   if (!data) return <p className="text-slate-600">Loading analytics…</p>;
@@ -26,9 +29,14 @@ function RegistrarAnalytics({ token }) {
 
   return (
     <div className="space-y-8">
-      <div className="rounded-xl bg-white p-4 shadow-sm">
-        <h3 className="text-sm font-semibold text-slate-800">Enrollment by Program (Active Term)</h3>
-        <div className="mt-3 h-64 w-full">
+      <AppShell.PageHeader
+        title="Analytics overview"
+        description="Spot enrollment trends and address outliers in real time."
+        breadcrumbs={[{ label: 'Registrar', to: '/registrar/dashboard' }, { label: 'Analytics' }]}
+      />
+
+      <AnalyticsTile title="Enrollment by Program" description="Active term performance">
+        <div className="h-64 w-full">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={enrollmentByProgram}>
               <XAxis dataKey="program" />
@@ -38,17 +46,16 @@ function RegistrarAnalytics({ token }) {
             </BarChart>
           </ResponsiveContainer>
         </div>
-      </div>
+      </AnalyticsTile>
 
       <div className="grid gap-8 md:grid-cols-2">
-        <div className="rounded-xl bg-white p-4 shadow-sm">
-          <h3 className="text-sm font-semibold text-slate-800">Status Breakdown (All Students)</h3>
-          <div className="mt-3 h-64 w-full">
+        <AnalyticsTile title="Status Breakdown" description="Distribution across all students">
+          <div className="h-64 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie data={statusBreakdown} dataKey="count" nameKey="status" outerRadius={80} label>
                   {statusBreakdown.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    <Cell key={`cell-${entry.status}`} fill={COLORS[index % COLORS.length]} />
                   ))}
                 </Pie>
                 <Legend />
@@ -56,23 +63,22 @@ function RegistrarAnalytics({ token }) {
               </PieChart>
             </ResponsiveContainer>
           </div>
-        </div>
-        <div className="rounded-xl bg-white p-4 shadow-sm">
-          <h3 className="text-sm font-semibold text-slate-800">Students with INC</h3>
+        </AnalyticsTile>
+        <AnalyticsTile title="Students with INC" description="Monitor learners needing follow up">
           <Table
-            columns={[{ header: 'ID', accessor: 'id' }, { header: 'Name', accessor: 'name' }, { header: 'Program', accessor: 'program' }]}
+            columns={[
+              { header: 'ID', accessor: 'id' },
+              { header: 'Name', accessor: 'name' },
+              { header: 'Program', accessor: 'program' }
+            ]}
             data={incStudents}
             emptyMessage="No INC records"
           />
-        </div>
+        </AnalyticsTile>
       </div>
     </div>
   );
 }
-
-RegistrarAnalytics.propTypes = {
-  token: PropTypes.string.isRequired
-};
 
 export default RegistrarAnalytics;
 

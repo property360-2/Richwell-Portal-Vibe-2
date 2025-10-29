@@ -1,58 +1,166 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Routes, Route, useNavigate, Navigate, Link } from 'react-router-dom';
-import Button from './components/Button.jsx';
-import LoginForm from './components/LoginForm.jsx';
-import Table from './components/Table.jsx';
+import PropTypes from 'prop-types';
+import { Navigate, Route, Routes } from 'react-router-dom';
+import AppShell from './layouts/AppShell.jsx';
 import Alert from './components/Alert.jsx';
-import InputField from './components/InputField.jsx';
-import Sidebar from './components/Sidebar.jsx';
+import { useAuth } from './context/AuthContext.jsx';
+import LoginPage from './pages/auth/Login.jsx';
 import StudentDashboard from './pages/student/Dashboard.jsx';
+import StudentGrades from './pages/student/Grades.jsx';
+import RegistrarDashboard from './pages/registrar/Dashboard.jsx';
+import RegistrarStudents from './pages/registrar/Students.jsx';
 import RegistrarAnalytics from './pages/registrar/Analytics.jsx';
-import Chart from './components/Chart.jsx';
-import Modal from './components/Modal.jsx';
-import { login as apiLogin, logout as apiLogout, fetchProfile, request as apiRequest } from './services/authApi.js';
 
-function useAuth(){
-  const [token,setToken]=useState(()=>localStorage.getItem('token'));
-  const [user,setUser]=useState(()=>{const raw=localStorage.getItem('user');return raw?JSON.parse(raw):null;});
-  const [loading,setLoading]=useState(false);
-  async function login(credentials){setLoading(true);try{const res=await apiLogin(credentials);setToken(res.token);setUser(res.user);localStorage.setItem('token',res.token);localStorage.setItem('user',JSON.stringify(res.user));return {ok:true};}catch(e){return {ok:false,message:e.message};}finally{setLoading(false);}}
-  async function logout(){try{if(token)await apiLogout(token);}catch(_){}setToken(null);setUser(null);localStorage.removeItem('token');localStorage.removeItem('user');}
-  async function refreshProfile(){if(!token)return null;try{const data=await fetchProfile(token);setUser(data.user);localStorage.setItem('user',JSON.stringify(data.user));return data.user;}catch(e){await logout();return null;}}
-  return {token,user,loading,login,logout,refreshProfile};
+function ProtectedRoute({ children }) {
+  const { token } = useAuth();
+  if (!token) {
+    return <Navigate to="/login" replace />;
+  }
+  return children;
 }
 
-function Protected({children}){return localStorage.getItem('token')?children:<Navigate to="/login" replace/>}
+ProtectedRoute.propTypes = {
+  children: PropTypes.node.isRequired
+};
 
-function LoginPage({onLogin}){const navigate=useNavigate();const [error,setError]=useState('');const [loading,setLoading]=useState(false);async function handleSubmit(v){setLoading(true);const r=await onLogin(v);setLoading(false);if(r.ok)navigate('/');else setError(r.message||'Login failed');}return(<div className="mx-auto max-w-md py-16"><h1 className="text-center text-2xl font-semibold text-slate-900">Sign in</h1><p className="mt-2 text-center text-sm text-slate-600">Use a seeded account like student@example.com / ChangeMe123!</p><div className="mt-8 rounded-xl bg-white p-6 shadow-sm"><LoginForm onSubmit={handleSubmit} loading={loading} error={error}/></div></div>)}
+function RoleRoute({ allowedRoles, children }) {
+  const { user } = useAuth();
+  const fallback = `/${(user?.role || 'student').toLowerCase()}/dashboard`;
+  if (!user || (allowedRoles?.length && !allowedRoles.includes(user.role))) {
+    return <Navigate to={fallback} replace />;
+  }
+  return children;
+}
 
-function Header({user,onLogout}){return(<header className="bg-white shadow"><div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4"><div><h1 className="text-lg font-semibold text-slate-900"><Link to={`/${(user?.role||'student').toLowerCase()}/dashboard`}>Richwell College Portal</Link></h1><p className="text-xs text-slate-500">Welcome, {user?.firstName} {user?.lastName} ({user?.role})</p></div><Button variant="secondary" onClick={onLogout}>Logout</Button></div></header>)}
+RoleRoute.propTypes = {
+  allowedRoles: PropTypes.arrayOf(PropTypes.string),
+  children: PropTypes.node.isRequired
+};
 
-function StudentGrades({token}){const [data,setData]=useState(null);const [error,setError]=useState('');const [loading,setLoading]=useState(true);useEffect(()=>{setLoading(true);apiRequest('/grades/student/me',{token}).then(setData).catch(e=>setError(e.message)).finally(()=>setLoading(false));},[token]);if(error)return<Alert variant="danger">{error}</Alert>;if(!data||loading)return<p className="text-slate-600">Loading grades…</p>;const incList=(data.enrollments||[]).flatMap(e=>e.subjects).filter(s=>s.grade?.value==='INC').map(s=>`${s.subject.code} – ${s.subject.name}`);return(<div className="space-y-4"><Alert variant="info" title="GPA">{data.gpa??'N/A'}</Alert>{incList.length>0&&(<Alert variant="warning" title="Incomplete (INC) subjects">{incList.join(', ')}</Alert>)}{data.enrollments.map((t,idx)=>(<div key={idx} className="space-y-2"><h3 className="text-sm font-semibold text-slate-700">{t.term.schoolYear} – {t.term.semester}</h3><Table columns={[{header:'Code',accessor:'code'},{header:'Subject',accessor:'name'},{header:'Units',accessor:'units'},{header:'Grade',accessor:'grade'}]} data={t.subjects.map(s=>({id:s.subject.id,code:s.subject.code,name:s.subject.name,units:s.subject.units,grade:s.grade?.value??'-'}))}/></div>))}</div>)}
+RoleRoute.defaultProps = {
+  allowedRoles: []
+};
 
-function RegistrarPanel({token}){
-  const [programs,setPrograms]=useState([]);const [subjects,setSubjects]=useState([]);const [professors,setProfessors]=useState([]);const [sections,setSections]=useState([]);const [terms,setTerms]=useState([]);const [pending,setPending]=useState([]);const [error,setError]=useState('');const [loading,setLoading]=useState(false);const [summary,setSummary]=useState({totalEnrolledStudents:0,pendingDocuments:0,certificatesIssued:0,trend:[],term:null});
-  const [sectForm,setSectForm]=useState({name:'',subjectId:'',professorId:'',maxSlots:40,semester:'FIRST',academicYear:'2025-2026',schedule:''});const [sectFormError,setSectFormError]=useState('');const [sectErrors,setSectErrors]=useState({});const [sectTouched,setSectTouched]=useState({});const [subjectProgramFilter,setSubjectProgramFilter]=useState('');const [subjectYearFilter,setSubjectYearFilter]=useState('');const [assignForm,setAssignForm]=useState({programId:'',subjectId:'',recommendedYear:'',recommendedSemester:''});
-  function validateSection(f){const e={};if(!f.name)e.name='Required';if(!f.subjectId)e.subjectId='Required';if(!f.professorId)e.professorId='Required';if(!f.maxSlots||Number(f.maxSlots)<=0)e.maxSlots='Must be positive';if(!['FIRST','SECOND','SUMMER'].includes(String(f.semester)))e.semester='Invalid';if(!f.academicYear)e.academicYear='Required';return e;}
-  function onSectChange(field,value){const next={...sectForm,[field]:value};setSectForm(next);setSectTouched(t=>({...t,[field]:true}));setSectErrors(validateSection(next));}
-  async function refreshAll(){setError('');setLoading(true);try{const [p,s,sc,t,pg,profs,sum]=await Promise.all([apiRequest('/registrar/programs',{token}),apiRequest('/registrar/subjects',{token}),apiRequest('/registrar/sections',{token}),apiRequest('/registrar/terms',{token}),apiRequest('/grades/registrar/pending',{token}),apiRequest('/registrar/professors',{token}),apiRequest('/registrar/summary',{token})]);setPrograms(p.programs||[]);setSubjects(s.subjects||[]);setSections(sc.sections||[]);setTerms(t.terms||[]);setPending(pg.pending||[]);setProfessors(profs.professors||[]);setSummary(sum||{});if(sum?.term?.schoolYear){setSectForm(f=>({...f,academicYear:sum.term.schoolYear}));}}catch(e){setError(e.message)}finally{setLoading(false)}}
-  useEffect(()=>{refreshAll();},[token]);
-  async function approve(id){try{await apiRequest(`/grades/registrar/${id}/approve`,{token,method:'POST'});await refreshAll();}catch(e){setError(e.message)}}
-  const quote='Education is the passport to the future.';
-  return(<div className="space-y-8">{loading&&<Alert>Loading…</Alert>}<div className="rounded-xl bg-white p-4 shadow-sm"><p className="text-sm text-slate-600">{quote}</p></div><div className="grid gap-4 md:grid-cols-3"><div className="rounded-xl bg-white p-4 shadow-sm"><p className="text-xs text-slate-500">Total Enrolled Students</p><p className="mt-1 text-2xl font-semibold text-slate-900">{summary.totalEnrolledStudents}</p></div><div className="rounded-xl bg-white p-4 shadow-sm"><p className="text-xs text-slate-500">Pending Documents</p><p className="mt-1 text-2xl font-semibold text-slate-900">{summary.pendingDocuments}</p></div><div className="rounded-xl bg-white p-4 shadow-sm"><p className="text-xs text-slate-500">Certificates Issued</p><p className="mt-1 text-2xl font-semibold text-slate-900">{summary.certificatesIssued}</p></div></div><Chart title="Enrollment Trend" description={`Active Term: ${summary.term?summary.term.schoolYear+' – '+summary.term.semester:'None'}`} footer="Mini trend (last 30 days)."/><div className="grid gap-4 md:grid-cols-2"><div className="space-y-3 rounded-xl bg-white p-4 shadow-sm"><h3 className="text-sm font-semibold text-slate-800">Create Section</h3><InputField label="Name" value={sectForm.name} onChange={e=>onSectChange('name',e.target.value)} error={sectTouched.name&&sectErrors.name?sectErrors.name:''}/><div><label className="block text-sm font-medium text-slate-700">Filter by Program (optional)</label><select className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" value={subjectProgramFilter} onChange={e=>setSubjectProgramFilter(e.target.value)}><option value="">-- All Programs --</option>{programs.map(p=>(<option key={p.id} value={p.id}>{p.code} – {p.name}</option>))}</select></div><div><label className="block text-sm font-medium text-slate-700">Filter by Recommended Year (optional)</label><select className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" value={subjectYearFilter} onChange={e=>setSubjectYearFilter(e.target.value)}><option value="">-- All Years --</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option></select></div><div><label className="block text-sm font-medium text-slate-700">Subject</label><select className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" value={sectForm.subjectId} onChange={e=>onSectChange('subjectId',Number(e.target.value))}><option value="">-- Choose --</option>{subjects.filter(sub=>!subjectProgramFilter||(sub.programs||[]).some(ps=>ps.programId===Number(subjectProgramFilter))).filter(sub=>{const sem=sectForm.semester;const m=sub.programs||[];if(m.length===0)return true;const semOk=m.some(ps=>!ps.recommendedSemester||ps.recommendedSemester===sem);const yearOk=subjectYearFilter?m.some(ps=>ps.recommendedYear===Number(subjectYearFilter)):true;return semOk&&yearOk;}).map(sub=>(<option key={sub.id} value={sub.id}>{sub.code} – {sub.name}</option>))}</select>{sectTouched.subjectId&&sectErrors.subjectId&&<p className="mt-1 text-xs text-rose-500">{sectErrors.subjectId}</p>}</div><div><label className="block text-sm font-medium text-slate-700">Professor</label><select className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" value={sectForm.professorId} onChange={e=>onSectChange('professorId',Number(e.target.value))}><option value="">-- Choose --</option>{professors.map(pr=>(<option key={pr.id} value={pr.id}>{pr.user.firstName} {pr.user.lastName}</option>))}</select>{sectTouched.professorId&&sectErrors.professorId&&<p className="mt-1 text-xs text-rose-500">{sectErrors.professorId}</p>}</div><InputField label="Max Slots" type="number" value={sectForm.maxSlots} onChange={e=>onSectChange('maxSlots',Number(e.target.value))} error={sectTouched.maxSlots&&sectErrors.maxSlots?sectErrors.maxSlots:''}/><label className="block text-sm font-medium text-slate-700">Semester</label><select className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" value={sectForm.semester} onChange={e=>onSectChange('semester',e.target.value)}><option value="FIRST">FIRST</option><option value="SECOND">SECOND</option><option value="SUMMER">SUMMER</option></select>{sectTouched.semester&&sectErrors.semester&&<p className="mt-1 text-xs text-rose-500">{sectErrors.semester}</p>}<InputField label="Academic Year" value={sectForm.academicYear} onChange={e=>onSectChange('academicYear',e.target.value)} error={sectTouched.academicYear&&sectErrors.academicYear?sectErrors.academicYear:''}/><InputField label="Schedule (optional)" value={sectForm.schedule} onChange={e=>setSectForm({...sectForm,schedule:e.target.value})}/>{sectFormError&&<Alert variant="danger">{sectFormError}</Alert>}<div className="flex justify-end"><Button disabled={Object.keys(validateSection(sectForm)).length>0} onClick={async()=>{setSectFormError('');const errs=validateSection(sectForm);setSectErrors(errs);setSectTouched({name:true,subjectId:true,professorId:true,maxSlots:true,semester:true,academicYear:true});if(Object.keys(errs).length)return;try{await apiRequest('/registrar/sections',{token,method:'POST',body:JSON.stringify({...sectForm,status:'OPEN'})});setSectForm({name:'',subjectId:'',professorId:'',maxSlots:40,semester:'FIRST',academicYear:summary.term?.schoolYear||'2025-2026',schedule:''});await refreshAll();}catch(e){setSectFormError(e.message)}}}>Save</Button></div></div><div className="space-y-3 rounded-xl bg-white p-4 shadow-sm"><h3 className="text-sm font-semibold text-slate-800">Subject Assignments</h3><div className="grid gap-2 sm:grid-cols-2"><div><label className="block text-sm font-medium text-slate-700">Program</label><select className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" value={assignForm.programId} onChange={e=>setAssignForm({...assignForm,programId:e.target.value})}><option value="">-- Choose --</option>{programs.map(p=>(<option key={p.id} value={p.id}>{p.code}</option>))}</select></div><div><label className="block text-sm font-medium text-slate-700">Subject</label><select className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" value={assignForm.subjectId} onChange={e=>setAssignForm({...assignForm,subjectId:e.target.value})}><option value="">-- Choose --</option>{subjects.map(s=>(<option key={s.id} value={s.id}>{s.code}</option>))}</select></div><div><label className="block text-sm font-medium text-slate-700">Recommended Year</label><select className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" value={assignForm.recommendedYear} onChange={e=>setAssignForm({...assignForm,recommendedYear:e.target.value})}><option value="">None</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option></select></div><div><label className="block text-sm font-medium text-slate-700">Recommended Semester</label><select className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" value={assignForm.recommendedSemester} onChange={e=>setAssignForm({...assignForm,recommendedSemester:e.target.value})}><option value="">None</option><option value="FIRST">FIRST</option><option value="SECOND">SECOND</option><option value="SUMMER">SUMMER</option></select></div></div><div className="flex justify-end"><Button onClick={async()=>{try{if(!assignForm.programId||!assignForm.subjectId)return;const payload={recommendedYear:assignForm.recommendedYear?Number(assignForm.recommendedYear):null,recommendedSemester:assignForm.recommendedSemester||null};await apiRequest(`/registrar/programs/${assignForm.programId}/subjects/${assignForm.subjectId}`,{token,method:'POST',body:JSON.stringify(payload)});setAssignForm({programId:'',subjectId:'',recommendedYear:'',recommendedSemester:''});await refreshAll();}catch(e){setError(e.message)}}}>Add Assignment</Button></div><Table columns={[{header:'Program',accessor:'program'},{header:'Subject',accessor:'subject'},{header:'Year',accessor:'year'},{header:'Semester',accessor:'semester'},{header:'Actions',accessor:'actions',render:(_,row)=>(<Button variant="danger" onClick={async()=>{await apiRequest(`/registrar/programs/${row.programId}/subjects/${row.subjectId}`,{token,method:'DELETE'});await refreshAll();}}>Remove</Button>)}]} data={subjects.flatMap(s=>(s.programs||[]).map(ps=>({id:`${ps.programId}-${ps.subjectId}`,programId:ps.programId,subjectId:ps.subjectId,program:(programs.find(p=>p.id===ps.programId)?.code)||ps.programId,subject:s.code,year:ps.recommendedYear??'-',semester:ps.recommendedSemester??'-'})))} emptyMessage="No assignments yet"/></div></div><div className="rounded-xl bg-white p-4 shadow-sm"><h3 className="text-sm font-semibold text-slate-800">Pending Grades</h3><Table columns={[{header:'Grade ID',accessor:'id'},{header:'EnrollmentSubject ID',accessor:'enrollmentSubjectId'},{header:'Approved',accessor:'approved'},{header:'Action',accessor:'action',render:(_,row)=>(<Button onClick={()=>approve(row.id)}>Approve</Button>)}]} data={pending.map(g=>({id:g.id,enrollmentSubjectId:g.enrollmentSubjectId,approved:String(g.approved)}))} emptyMessage="No pending grades"/></div><Table columns={[{header:'Code',accessor:'code'},{header:'Name',accessor:'name'},{header:'Department',accessor:'department'}]} data={programs}/><Table columns={[{header:'Code',accessor:'code'},{header:'Name',accessor:'name'},{header:'Units',accessor:'units'},{header:'Type',accessor:'subjectType'}]} data={subjects}/><Table columns={[{header:'Name',accessor:'name'},{header:'SubjectId',accessor:'subjectId'},{header:'ProfessorId',accessor:'professorId'},{header:'Slots',accessor:'maxSlots'}]} data={sections}/><Table columns={[{header:'SY',accessor:'schoolYear'},{header:'Sem',accessor:'semester'},{header:'Active',accessor:'isActive'}]} data={terms}/></div>)}
+function Placeholder({ title }) {
+  return (
+    <div className="space-y-4">
+      <AppShell.PageHeader title={title} description="Experience coming soon." breadcrumbs={[{ label: title }]} />
+      <Alert variant="info">We are still designing this workflow.</Alert>
+    </div>
+  );
+}
 
-function EnrollForm({onSubmit}){const [ids,setIds]=useState('');return(<div className="rounded-xl bg-white p-4 shadow-sm"><p className="text-sm font-medium text-slate-700">Confirm Enrollment</p><p className="mt-1 text-xs text-slate-500">Enter comma-separated section IDs to enroll.</p><div className="mt-2 flex gap-2"><input value={ids} onChange={e=>setIds(e.target.value)} placeholder="e.g. 1,2" className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm"/><Button onClick={()=>onSubmit(ids.split(',').map(x=>Number(x.trim())).filter(Boolean))}>Save</Button></div></div>)}
+Placeholder.propTypes = {
+  title: PropTypes.string.isRequired
+};
 
-const GRADE_OPTIONS=['1.0','1.25','1.5','1.75','2.0','2.25','2.5','2.75','3.0','4.0','5.0','INC','DRP'];
-function ProfessorPanel({token}){const [sections,setSections]=useState([]);const [selected,setSelected]=useState('');const [roster,setRoster]=useState([]);const [grades,setGrades]=useState({});const [message,setMessage]=useState('');const [error,setError]=useState('');useEffect(()=>{apiRequest('/professor/sections',{token}).then(res=>setSections(res.sections||[])).catch(e=>setError(e.message));},[token]);useEffect(()=>{if(!selected)return;apiRequest(`/professor/sections/${selected}/roster`,{token}).then(res=>{setRoster(res.roster||[]);const map={};(res.roster||[]).forEach(r=>{map[r.enrollmentSubjectId]={value:r.grade?.value||'',remarks:''};});setGrades(map);}).catch(e=>setError(e.message));},[selected,token]);function setGrade(id,v){setGrades(g=>({...g,[id]:{...(g[id]||{}),value:v}}));}function setRemarks(id,v){setGrades(g=>({...g,[id]:{...(g[id]||{}),remarks:v}}));}async function submitGrades(){setMessage('');setError('');try{const payload=Object.entries(grades).filter(([,v])=>v.value).map(([k,v])=>({enrollmentSubjectId:Number(k),value:v.value,remarks:v.remarks}));if(payload.length===0){setError('Select at least one grade');return;}await apiRequest(`/professor/sections/${selected}/grades`,{token,method:'POST',body:JSON.stringify({grades:payload})});setMessage('Grades submitted for approval.');}catch(e){setError(e.message);}}if(error)return<Alert variant="danger">{error}</Alert>;return(<div className="space-y-6"><div className="rounded-xl bg-white p-4 shadow-sm"><label className="text-sm font-medium text-slate-700">Select section</label><select className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" value={selected} onChange={e=>setSelected(e.target.value)}><option value="">-- Choose --</option>{sections.map(s=>(<option key={s.id} value={s.id}>{s.name} (Subject {s.subjectId})</option>))}</select></div>{selected&&(<div className="space-y-3 rounded-xl bg-white p-4 shadow-sm"><h3 className="text-sm font-semibold text-slate-800">Roster</h3><Table columns={[{header:'Student',accessor:'studentName'},{header:'Current Grade',accessor:'currentGrade'},{header:'New Grade',accessor:'newGrade',render:(_,row)=>(<select className="w-full rounded-md border border-slate-300 px-2 py-1 text-sm" value={grades[row.enrollmentSubjectId]?.value||''} onChange={e=>setGrade(row.enrollmentSubjectId,e.target.value)}><option value="">--</option>{GRADE_OPTIONS.map(g=>(<option key={g} value={g}>{g}</option>))}</select>)},{header:'Remarks',accessor:'remarks',render:(_,row)=>(<input className="w-full rounded-md border border-slate-300 px-2 py-1 text-sm" value={grades[row.enrollmentSubjectId]?.remarks||''} onChange={e=>setRemarks(row.enrollmentSubjectId,e.target.value)} placeholder="Optional"/>)}]} data={roster.map(r=>({id:r.enrollmentSubjectId,enrollmentSubjectId:r.enrollmentSubjectId,studentName:`${r.student.firstName} ${r.student.lastName}`,currentGrade:r.grade?.value||'-'}))} emptyMessage="No students enrolled"/><div className="flex justify-end"><Button onClick={submitGrades}>Submit Grades</Button></div>{message&&<Alert variant="success">{message}</Alert>}</div>)}</div>)}
+function PortalRoutes() {
+  const { user, logout } = useAuth();
+  const defaultPath = `/${(user?.role || 'student').toLowerCase()}/dashboard`;
 
-function DeanAnalytics({token}){const [data,setData]=useState(null);const [error,setError]=useState('');useEffect(()=>{apiRequest('/analytics/dean',{token}).then(setData).catch(e=>setError(e.message));},[token]);if(error)return<Alert variant="danger">{error}</Alert>;if(!data)return<p className="text-slate-600">Loading…</p>;const s=data.summary;return(<div className="grid gap-4 md:grid-cols-4">{Object.entries(s).map(([k,v])=>(<div key={k} className="rounded-xl bg-white p-4 shadow-sm"><p className="text-xs uppercase tracking-wide text-slate-500">{k}</p><p className="mt-1 text-2xl font-semibold text-slate-900">{v}</p></div>))}</div>)}
+  return (
+    <AppShell user={user} onLogout={logout}>
+      <Routes>
+        <Route
+          path="/student/dashboard"
+          element={
+            <RoleRoute allowedRoles={["STUDENT"]}>
+              <StudentDashboard />
+            </RoleRoute>
+          }
+        />
+        <Route
+          path="/student/grades"
+          element={
+            <RoleRoute allowedRoles={["STUDENT"]}>
+              <StudentGrades />
+            </RoleRoute>
+          }
+        />
+        <Route
+          path="/student/notifications"
+          element={
+            <RoleRoute allowedRoles={["STUDENT"]}>
+              <Placeholder title="Student Announcements" />
+            </RoleRoute>
+          }
+        />
+        <Route
+          path="/registrar/dashboard"
+          element={
+            <RoleRoute allowedRoles={["REGISTRAR"]}>
+              <RegistrarDashboard />
+            </RoleRoute>
+          }
+        />
+        <Route
+          path="/registrar/students"
+          element={
+            <RoleRoute allowedRoles={["REGISTRAR"]}>
+              <RegistrarStudents />
+            </RoleRoute>
+          }
+        />
+        <Route
+          path="/registrar/analytics"
+          element={
+            <RoleRoute allowedRoles={["REGISTRAR"]}>
+              <RegistrarAnalytics />
+            </RoleRoute>
+          }
+        />
+        <Route
+          path="/admission/*"
+          element={
+            <RoleRoute allowedRoles={["ADMISSION"]}>
+              <Placeholder title="Admission" />
+            </RoleRoute>
+          }
+        />
+        <Route
+          path="/professor/*"
+          element={
+            <RoleRoute allowedRoles={["PROFESSOR"]}>
+              <Placeholder title="Professor" />
+            </RoleRoute>
+          }
+        />
+        <Route
+          path="/dean/*"
+          element={
+            <RoleRoute allowedRoles={["DEAN"]}>
+              <Placeholder title="Dean" />
+            </RoleRoute>
+          }
+        />
+        <Route
+          path="/admin/*"
+          element={
+            <RoleRoute allowedRoles={["ADMIN"]}>
+              <Placeholder title="Admin" />
+            </RoleRoute>
+          }
+        />
+        <Route path="*" element={<Navigate to={defaultPath} replace />} />
+      </Routes>
+    </AppShell>
+  );
+}
 
-function RegistrarStudents({token}){const [q,setQ]=useState('');const [programId,setProgramId]=useState('');const [yearLevel,setYearLevel]=useState('');const [status,setStatus]=useState('');const [rows,setRows]=useState([]);const [error,setError]=useState('');const [page,setPage]=useState(1);const [pageSize]=useState(10);const [total,setTotal]=useState(0);const [programs,setPrograms]=useState([]);const [modal,setModal]=useState({open:false,detail:null});async function load(p=page){setError('');try{const params=new URLSearchParams();if(q)params.set('q',q);if(programId)params.set('programId',programId);if(yearLevel)params.set('yearLevel',yearLevel);if(status)params.set('status',status);params.set('page',String(p));params.set('pageSize',String(pageSize));const res=await apiRequest(`/registrar/students?${params.toString()}`,{token});setRows(res.students||[]);setTotal(res.total||0);setPage(res.page||p);}catch(e){setError(e.message)}}useEffect(()=>{load(1);apiRequest('/registrar/programs',{token}).then(p=>setPrograms(p.programs||[]));},[]);async function viewDetail(id){try{const res=await apiRequest(`/registrar/students/${id}`,{token});setModal({open:true,detail:res});}catch(e){setError(e.message)}}async function updateStatus(id,newStatus){await apiRequest(`/registrar/students/${id}/status`,{token,method:'PATCH',body:JSON.stringify({status:newStatus})});await load(page);const updated=await apiRequest(`/registrar/students/${id}`,{token});setModal(m=>({...m,detail:updated}));}return(<div className="space-y-4"><div className="grid gap-2 sm:grid-cols-4"><InputField placeholder="Search name/email/student no" value={q} onChange={e=>setQ(e.target.value)}/><div><label className="block text-sm font-medium text-slate-700">Program</label><select className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" value={programId} onChange={e=>setProgramId(e.target.value)}><option value="">All</option>{programs.map(p=>(<option key={p.id} value={p.id}>{p.code}</option>))}</select></div><div><label className="block text-sm font-medium text-slate-700">Year Level</label><select className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" value={yearLevel} onChange={e=>setYearLevel(e.target.value)}><option value="">All</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option></select></div><div><label className="block text-sm font-medium text-slate-700">Status</label><select className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" value={status} onChange={e=>setStatus(e.target.value)}><option value="">All</option><option value="regular">regular</option><option value="irregular">irregular</option><option value="inactive">inactive</option></select></div></div><div className="flex items-center justify-between"><div className="text-xs text-slate-500">Total: {total} • Page {page}</div><div className="flex gap-2"><Button variant="secondary" onClick={()=>load(Math.max(1,page-1))}>Prev</Button><Button variant="secondary" onClick={()=>load(page+1)}>Next</Button><Button onClick={()=>load(1)}>Apply Filters</Button></div></div>{error&&<Alert variant="danger">{error}</Alert>}<Table columns={[{header:'Student No',accessor:'studentNo'},{header:'Name',accessor:'name'},{header:'Program',accessor:'program'},{header:'Year',accessor:'yearLevel'},{header:'Status',accessor:'status'},{header:'Missing Docs',accessor:'missingDocs'},{header:'Actions',accessor:'actions',render:(_,row)=>(<Button variant="secondary" onClick={()=>viewDetail(row.id)}>View More</Button>)}]} data={rows.map(s=>({id:s.id,studentNo:s.studentNo,name:`${s.user.firstName} ${s.user.lastName}`,program:s.program.code,yearLevel:s.yearLevel,status:s.status,missingDocs:'No'}))}/><Modal open={modal.open} onClose={()=>setModal({open:false,detail:null})} title={modal.detail?`Student #${modal.detail.student.id}`:'Details'} primaryAction={null} secondaryAction={<Button variant="secondary" onClick={()=>setModal({open:false,detail:null})}>Close</Button>}>{!modal.detail?<p>Loading…</p>:(<div className="space-y-3"><div className="grid gap-2 sm:grid-cols-2"><div><span className="text-xs text-slate-500">Name</span><p className="text-sm font-medium">{modal.detail.student.user.firstName} {modal.detail.student.user.lastName}</p></div><div><span className="text-xs text-slate-500">Program</span><p className="text-sm font-medium">{modal.detail.student.program.code}</p></div><div><span className="text-xs text-slate-500">Status</span><p className="text-sm font-medium">{modal.detail.student.status}</p></div><div className="flex items-end gap-2"><Button variant="secondary" onClick={()=>updateStatus(modal.detail.student.id,'regular')}>Mark Verified</Button><Button variant="danger" onClick={()=>updateStatus(modal.detail.student.id,'inactive')}>Archive</Button></div></div><div><p className="text-sm font-semibold text-slate-800">Recent Enrollments</p><Table columns={[{header:'Term',accessor:'term'},{header:'Subjects',accessor:'subjects'}]} data={(modal.detail.student.enrollments||[]).map(e=>({id:e.id,term:`${e.term.schoolYear} – ${e.term.semester}`,subjects:e.subjects.map(s=>s.subject.code).join(', ')}))} emptyMessage="No enrollments"/></div><div><p className="text-sm font-semibold text-slate-800">Documents</p><Alert>Documents module not yet implemented.</Alert></div></div>)}</Modal></div>)}
+export default function App() {
+  const auth = useAuth();
 
-function ProfessorDashboard({token}){const [sections,setSections]=useState([]);useEffect(()=>{apiRequest('/professor/sections',{token}).then(res=>setSections(res.sections||[]));},[token]);return(<div className="grid gap-4 md:grid-cols-3"><div className="rounded-xl bg-white p-4 shadow-sm"><p className="text-xs text-slate-500">Sections Assigned</p><p className="mt-1 text-2xl font-semibold text-slate-900">{sections.length}</p></div><div className="rounded-xl bg-white p-4 shadow-sm"><p className="text-xs text-slate-500">Total Students</p><p className="mt-1 text-2xl font-semibold text-slate-900">—</p></div><div className="rounded-xl bg-white p-4 shadow-sm"><p className="text-xs text-slate-500">Pending Grades</p><p className="mt-1 text-2xl font-semibold text-slate-900">—</p></div></div>)}
-
-function Dashboard({token,user,onLogout}){function RoleRoute({allowed,children}){if(!user||!allowed.includes(user.role))return<Navigate to={`/${(user?.role||'student').toLowerCase()}/dashboard`} replace/>;return children;}return(<div className="min-h-screen bg-slate-50"><Header user={user} onLogout={onLogout}/><div className="mx-auto flex max-w-6xl gap-6 px-6 py-8"><Sidebar role={user?.role}/><div className="min-h-[60vh] flex-1"><Routes><Route path="/student/dashboard" element={<RoleRoute allowed={["STUDENT"]}><StudentDashboard token={token} user={user}/></RoleRoute>}/><Route path="/student/grades" element={<RoleRoute allowed={["STUDENT"]}><StudentGrades token={token}/></RoleRoute>}/><Route path="/registrar/dashboard" element={<RoleRoute allowed={["REGISTRAR"]}><RegistrarPanel token={token}/></RoleRoute>}/><Route path="/registrar/students" element={<RoleRoute allowed={["REGISTRAR"]}><RegistrarStudents token={token}/></RoleRoute>}/><Route path="/registrar/analytics" element={<RoleRoute allowed={["REGISTRAR"]}><RegistrarAnalytics token={token}/></RoleRoute>}/><Route path="/admission/dashboard" element={<RoleRoute allowed={["ADMISSION"]}><AdmissionPanel token={token}/></RoleRoute>}/><Route path="/admission/students" element={<RoleRoute allowed={["ADMISSION"]}><AdmissionPanel token={token}/></RoleRoute>}/><Route path="/professor/dashboard" element={<RoleRoute allowed={["PROFESSOR"]}><ProfessorDashboard token={token}/></RoleRoute>}/><Route path="/professor/classes" element={<RoleRoute allowed={["PROFESSOR"]}><ProfessorPanel token={token}/></RoleRoute>}/><Route path="/professor/grades" element={<RoleRoute allowed={["PROFESSOR"]}><ProfessorPanel token={token}/></RoleRoute>}/><Route path="/dean/dashboard" element={<RoleRoute allowed={["DEAN"]}><DeanAnalytics token={token}/></RoleRoute>}/><Route path="/dean/analytics" element={<RoleRoute allowed={["DEAN"]}><DeanAnalytics token={token}/></RoleRoute>}/><Route path="*" element={<Navigate to={`/${(user?.role||'student').toLowerCase()}/dashboard`} replace/>}/></Routes></div></div></div>)}
-
-export default function App(){const auth=useAuth();return(<Routes><Route path="/login" element={<LoginPage onLogin={auth.login}/>}/><Route path="/*" element={<Protected><Dashboard token={auth.token} user={auth.user} onLogout={auth.logout}/></Protected>}/><Route path="*" element={<Navigate to="/" replace/>}/></Routes>)}
-
+  return (
+    <Routes>
+      <Route path="/login" element={<LoginPage onLogin={auth.login} loading={auth.loading} />} />
+      <Route
+        path="/*"
+        element={
+          <ProtectedRoute>
+            <PortalRoutes />
+          </ProtectedRoute>
+        }
+      />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  );
+}

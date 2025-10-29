@@ -1,52 +1,28 @@
 import PropTypes from 'prop-types';
 import { NavLink } from 'react-router-dom';
+import { navConfig } from '../navigation/routes.js';
 
 function Sidebar({ role }) {
-  const itemsByRole = {
-    STUDENT: [
-      { to: '/student/dashboard', label: 'Dashboard' },
-      { to: '/student/grades', label: 'Grades' },
-      { to: '/student/notifications', label: 'Announcements' }
-    ],
-    REGISTRAR: [
-      { to: '/registrar/dashboard', label: 'Dashboard' },
-      { to: '/registrar/students', label: 'Student Records' },
-      { to: '/registrar/analytics', label: 'Analytics' }
-    ],
-    ADMISSION: [
-      { to: '/admission/dashboard', label: 'Dashboard' },
-      { to: '/admission/students', label: 'Students' }
-    ],
-    PROFESSOR: [
-      { to: '/professor/dashboard', label: 'Dashboard' },
-      { to: '/professor/classes', label: 'My Classes' },
-      { to: '/professor/grades', label: 'Grades' }
-    ],
-    DEAN: [
-      { to: '/dean/dashboard', label: 'Dashboard' },
-      { to: '/dean/analytics', label: 'Analytics' }
-    ],
-    ADMIN: [
-      { to: '/admin/dashboard', label: 'Dashboard' },
-      { to: '/admin/settings', label: 'Settings' }
-    ]
-  };
-
-  const items = itemsByRole[role] || [];
+  const items = navConfig[role] || [];
 
   return (
     <aside className="w-64 shrink-0 border-r border-slate-200 bg-white">
       <nav className="p-4">
         <ul className="space-y-1">
-          {items.map((it) => (
-            <li key={it.to}>
+          {items.map((item) => (
+            <li key={item.to}>
               <NavLink
-                to={it.to}
+                to={item.to}
                 className={({ isActive }) =>
-                  `block rounded-md px-3 py-2 text-sm font-medium ${isActive ? 'bg-indigo-50 text-indigo-700' : 'text-slate-700 hover:bg-slate-50'}`
+                  `flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition ${
+                    isActive
+                      ? 'bg-indigo-50 text-indigo-700'
+                      : 'text-slate-700 hover:bg-slate-50'
+                  }`
                 }
               >
-                {it.label}
+                {item.icon && <span aria-hidden>{item.icon}</span>}
+                <span>{item.label}</span>
               </NavLink>
             </li>
           ))}
@@ -58,6 +34,10 @@ function Sidebar({ role }) {
 
 Sidebar.propTypes = {
   role: PropTypes.string
+};
+
+Sidebar.defaultProps = {
+  role: 'STUDENT'
 };
 
 export default Sidebar;
