@@ -345,6 +345,7 @@ model EnrollmentSubject {
   @@map("enrollment_subjects")
 }
 
+// Add to existing Grade model
 model Grade {
   id                  Int         @id @default(autoincrement())
   enrollmentSubjectId Int
@@ -353,8 +354,8 @@ model Grade {
   encodedById         Int
   approved            Boolean     @default(false)
   dateEncoded         DateTime    @default(now())
-  repeatEligibleDate  DateTime?
-
+  repeatEligibleDate  DateTime?   // ✅ NEW: Auto-calculated based on subject type
+  
   enrollmentSubject   EnrollmentSubject @relation(fields: [enrollmentSubjectId], references: [id])
   professor           Professor         @relation(fields: [encodedById], references: [id])
 
@@ -362,6 +363,9 @@ model Grade {
   @@index([encodedById])
   @@map("grades")
 }
+
+// Add helper function to calculate repeat eligibility
+// This will be handled in the backend logic
 
 // ============================
 //  E. INC RESOLUTION & LOGS
