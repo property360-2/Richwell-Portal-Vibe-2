@@ -16,6 +16,9 @@ export default function AdmissionApplicants() {
   const [size] = useState(10);
   const [total, setTotal] = useState(0);
   const [view, setView] = useState(null);
+  const [editing, setEditing] = useState(null);
+  const [editForm, setEditForm] = useState({ fullName: "", email: "", programId: "" });
+  const [programs, setPrograms] = useState([]);
 
   const fetchData = () => {
     setLoading(true);
@@ -34,6 +37,10 @@ export default function AdmissionApplicants() {
     fetchData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, page, size]);
+
+  useEffect(() => {
+    api.get('/admin/programs', { params: { size: 100 } }).then((res) => setPrograms(res.data?.data || [])).catch(()=>{});
+  }, []);
 
   const setStatusAction = async (id, newStatus) => {
     try {
@@ -105,6 +112,7 @@ export default function AdmissionApplicants() {
                 <td className="px-4 py-3">
                   <div className="flex items-center justify-end gap-2">
                     <button onClick={() => setView(r)} className="px-3 py-1.5 rounded-md text-xs bg-gray-700 hover:bg-gray-600 text-white">View</button>
+                    <button onClick={() => { setEditing(r); setEditForm({ fullName: r.fullName || '', email: r.email || '', programId: r.program?.id || '' }); }} className="px-3 py-1.5 rounded-md text-xs bg-blue-700 hover:bg-blue-800 text-white">Edit</button>
                     {r.status === 'pending' && (
                       <>
                         <button onClick={() => setStatusAction(r.id, 'accepted')} className="px-3 py-1.5 rounded-md text-xs bg-green-600 hover:bg-green-700 text-white">Approve</button>
@@ -114,6 +122,7 @@ export default function AdmissionApplicants() {
                     {r.status === 'accepted' && (
                       <button onClick={() => createStudent(r.id)} className="px-3 py-1.5 rounded-md text-xs bg-purple-600 hover:bg-purple-700 text-white">Create Student Account</button>
                     )}
+                    <button onClick={async () => { if (!confirm('Delete this applicant?')) return; try { await api.delete(`/admission/applicants/${r.id}`); toast.success('Deleted'); fetchData(); } catch(e){ toast.error(e.response?.data?.message || 'Delete failed'); } }} className="px-3 py-1.5 rounded-md text-xs bg-red-700 hover:bg-red-800 text-white">Delete</button>
                   </div>
                 </td>
               </tr>
@@ -130,12 +139,36 @@ export default function AdmissionApplicants() {
         </div>
       </div>
 
-      <Modal open={!!view} onClose={() => setView(null)} title={view ? `Applicant — ${view.fullName}` : "Applicant"}>
+      <Modal open={!!view} onClose={() => setView(null)} title={view ? `Applicant - ${view.fullName}` : "Applicant"}>
         {view && (
-          <div className="text-sm text-gray-300 space-y-2">
+          <div className="text-sm text-gray-300 space-y-2 max-h-[60vh] overflow-y-auto pr-2">
             <div><span className="text-gray-400">Email:</span> {view.email}</div>
             <div><span className="text-gray-400">Program:</span> {view.program?.name}</div>
             <div><span className="text-gray-400">Status:</span> <span className="capitalize">{view.status}</span></div>
+            {(() => { let det = null; try { det = view.notes ? JSON.parse(view.notes) : null; } catch(_){}; return det ? (
+              <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2">
+                <div>
+                  <div className="text-gray-400">Learner Info</div>
+                  <div>LRN: {det.learner?.lrn || '-'}</div>
+                  <div>SY: {det.learner?.schoolYear || '-'}</div>
+                  <div>Year Level: {det.learner?.yearLevel || '-'}</div>
+                  <div>Student Type: {det.learner?.studentType || '-'}</div>
+                  <div>Semester: {det.learner?.semester || '-'}</div>
+                </div>
+                <div>
+                  <div className="text-gray-400">Contact</div>
+                  <div>Address: {det.personal?.address || '-'}</div>
+                  <div>Contact: {det.personal?.contact || '-'}</div>
+                  <div>Facebook: {det.personal?.facebook || '-'}</div>
+                </div>
+                <div className="md:col-span-2">
+                  <div className="text-gray-400">Family</div>
+                  <div>Father: {[det.family?.father?.lastName, det.family?.father?.firstName].filter(Boolean).join(', ') || '-'}</div>
+                  <div>Mother: {[det.family?.mother?.lastName, det.family?.mother?.firstName].filter(Boolean).join(', ') || '-'}</div>
+                  <div>Guardian: {[det.family?.guardian?.lastName, det.family?.guardian?.firstName].filter(Boolean).join(', ') || '-'}</div>
+                </div>
+              </div>
+            ) : null; })()}
             <div className="mt-2">
               <div className="text-gray-400 mb-1">Uploaded Documents:</div>
               {view.documents?.length ? (
@@ -146,8 +179,34 @@ export default function AdmissionApplicants() {
                 <div className="text-gray-500">No documents</div>
               )}
             </div>
-            <div className="mt-2"><span className="text-gray-400">Processed by:</span> {view.processedBy?.email || '—'}</div>
+            <div className="mt-2"><span className="text-gray-400">Processed by:</span> {view.processedBy?.email || '-'}</div>
           </div>
+        )}
+      </Modal>
+
+      {/* Edit Modal */}
+      <Modal open={!!editing} onClose={() => setEditing(null)} title={editing ? `Edit - ${editing.fullName}` : 'Edit Applicant'}>
+        {editing && (
+          <form className="space-y-3" onSubmit={async (e) => { e.preventDefault(); try { await api.put(`/admission/applicants/${editing.id}`, { ...editForm }); toast.success('Applicant updated'); setEditing(null); fetchData(); } catch(err){ toast.error(err.response?.data?.message || 'Update failed'); } }}>
+            <div>
+              <label className="block text-sm text-gray-300">Full Name</label>
+              <input className="mt-1 w-full bg-gray-900 border border-gray-700 rounded-lg p-2.5 outline-none" value={editForm.fullName} onChange={(e) => setEditForm((f)=>({ ...f, fullName: e.target.value }))} required />
+            </div>
+            <div>
+              <label className="block text-sm text-gray-300">Email</label>
+              <input type="email" className="mt-1 w-full bg-gray-900 border border-gray-700 rounded-lg p-2.5 outline-none" value={editForm.email} onChange={(e) => setEditForm((f)=>({ ...f, email: e.target.value }))} required />
+            </div>
+            <div>
+              <label className="block text-sm text-gray-300">Program</label>
+              <select className="mt-1 w-full bg-gray-900 border border-gray-700 rounded-lg p-2.5 outline-none" value={editForm.programId} onChange={(e)=> setEditForm((f)=>({ ...f, programId: e.target.value }))} required>
+                <option value="" disabled>Select program…</option>
+                {programs.map((p)=> (<option key={p.id} value={p.id}>{p.code} - {p.name}</option>))}
+              </select>
+            </div>
+            <div className="text-right">
+              <button type="submit" className="px-4 py-2 rounded-lg text-sm bg-purple-600 hover:bg-purple-700 text-white">Save</button>
+            </div>
+          </form>
         )}
       </Modal>
     </SidebarLayout>

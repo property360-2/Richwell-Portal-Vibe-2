@@ -100,6 +100,7 @@ model User {
   student   Student?
   professor Professor?
   logs      AnalyticsLog[]
+  processedApplicants Applicant[]
 
   @@index([roleId])
   @@map("users")
@@ -157,6 +158,7 @@ model Program {
   subjects      Subject[]
   students      Student[]
   curriculums   Curriculum[]
+  applicants    Applicant[]
 
   department    Department   @relation(fields: [departmentId], references: [id])
   sector        Sector       @relation(fields: [sectorId], references: [id])

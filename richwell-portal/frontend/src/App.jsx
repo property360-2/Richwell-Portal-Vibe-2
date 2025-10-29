@@ -12,6 +12,7 @@ import AdmissionDashboard from "./pages/admission/Dashboard";
 import AdmissionEnrollmentForm from "./pages/admission/EnrollmentForm";
 import AdmissionApplicants from "./pages/admission/Applicants";
 import AdmissionAnalytics from "./pages/admission/AdmissionAnalytics";
+import AdmissionPrograms from "./pages/admission/Programs";
 import DeanDashboard from "./pages/dean/Dashboard";
 import AdminDashboard from "./pages/admin/Dashboard";
 import AdminPrograms from "./pages/admin/Programs";
@@ -104,6 +105,14 @@ export default function App() {
           element={
             <ProtectedRoute role="admission">
               <AdmissionAnalytics />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admission/programs"
+          element={
+            <ProtectedRoute role="admission">
+              <AdmissionPrograms />
             </ProtectedRoute>
           }
         />

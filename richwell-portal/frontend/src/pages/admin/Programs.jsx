@@ -132,7 +132,7 @@ export default function Programs() {
           <select
             value={form.departmentId}
             name="departmentId"
-            onChange={(e) => { onChange(e); setPage(1); fetchData(); }}
+            onChange={(e) => { setDepartmentId(e.target.value); setPage(1); fetchData(); }}
             className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm outline-none"
           >
             <option value="">All Departments</option>
@@ -141,7 +141,7 @@ export default function Programs() {
           <select
             value={form.sectorId}
             name="sectorId"
-            onChange={(e) => { onChange(e); setPage(1); fetchData(); }}
+            onChange={(e) => { setSectorId(e.target.value); setPage(1); fetchData(); }}
             className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm outline-none"
           >
             <option value="">All Sectors</option>

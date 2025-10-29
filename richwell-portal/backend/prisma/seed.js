@@ -156,37 +156,122 @@ async function main() {
   }
   console.log("Sample students added (s.2025000x@ / student123)");
 
-  // Sample applicants for Admission Dashboard/Applicants
-  const admissionUser = await prisma.user.findUnique({ where: { email: "admission@richwell.edu" } });
-  const bsnProgram = await prisma.program.findUnique({ where: { code: "BSN" } });
-  const day = (n) => new Date(Date.now() - n * 24 * 60 * 60 * 1000);
-  const applicants = [
-    { fullName: "Maria Dela Cruz", email: "maria.delacruz@example.com", programId: bsisProgram?.id, status: "pending", submittedAt: day(1) },
-    { fullName: "Juan Dela Cruz", email: "juan.dc@example.com", programId: bsceProgram?.id, status: "accepted", submittedAt: day(3) },
-    { fullName: "Ana Santos", email: "ana.santos@example.com", programId: bsnProgram?.id, status: "rejected", submittedAt: day(7) },
-    { fullName: "Pedro Reyes", email: "pedro.reyes@example.com", programId: bsisProgram?.id, status: "pending", submittedAt: day(0) },
-    { fullName: "Liza Cruz", email: "liza.cruz@example.com", programId: bsceProgram?.id, status: "accepted", submittedAt: day(10) },
-  ].filter((a) => a.programId);
+  // Applicants removed: automated enrollment only (Admission-driven)
 
-  for (const a of applicants) {
-    await prisma.applicant.create({
+  // =============================
+  // Enrollment Advising Test Setup
+  // =============================
+  console.log("Setting up advising test data...");
+
+  // Academic Terms
+  const termFirst = await prisma.academicTerm.findFirst({ where: { schoolYear: "2025-2026", semester: "first" } });
+  if (!termFirst) {
+    await prisma.academicTerm.createMany({
+      data: [
+        { schoolYear: "2025-2026", semester: "first", isActive: true },
+        { schoolYear: "2025-2026", semester: "second", isActive: false },
+      ],
+    });
+  }
+  const activeTerm = await prisma.academicTerm.findFirst({ where: { schoolYear: "2025-2026", semester: "first" } });
+
+  // Department IT
+  await prisma.department.upsert({ where: { code: "IT" }, update: { name: "Information Technology" }, create: { name: "Information Technology", code: "IT" } });
+  const itDept = await prisma.department.findUnique({ where: { code: "IT" } });
+  const chedSector = await prisma.sector.findUnique({ where: { name: "CHED" } });
+
+  // Program BSIS (ensure set)
+  const bsis = await prisma.program.upsert({
+    where: { code: "BSIS" },
+    update: { description: "Bachelor of Science in Information System", departmentId: itDept?.id || undefined, sectorId: chedSector?.id || undefined },
+    create: { name: "BS Information System", code: "BSIS", description: "Bachelor of Science in Information System", departmentId: itDept.id, sectorId: chedSector.id },
+  });
+
+  // Subjects IS101..IS202
+  const subjDefs = [
+    { code: "IS101", name: "Intro to IS", units: 3, subjectType: "minor", programId: bsis.id, recommendedSemester: "first" },
+    { code: "IS102", name: "Programming 1", units: 3, subjectType: "major", programId: bsis.id, recommendedSemester: "first" },
+    { code: "IS103", name: "Computer Fundamentals", units: 3, subjectType: "minor", programId: bsis.id, recommendedSemester: "first" },
+    { code: "IS201", name: "Programming 2", units: 3, subjectType: "major", programId: bsis.id, recommendedSemester: "first" },
+    { code: "IS202", name: "Database Management", units: 3, subjectType: "major", programId: bsis.id, recommendedSemester: "first" },
+  ];
+  for (const s of subjDefs) {
+    await prisma.subject.upsert({ where: { code: s.code }, update: { name: s.name, units: s.units, subjectType: s.subjectType, programId: s.programId, recommendedSemester: s.recommendedSemester }, create: s });
+  }
+  const sIS102 = await prisma.subject.findUnique({ where: { code: "IS102" } });
+  const sIS201 = await prisma.subject.findUnique({ where: { code: "IS201" } });
+  const sIS202 = await prisma.subject.findUnique({ where: { code: "IS202" } });
+  if (sIS201 && sIS102 && sIS201.prerequisiteId !== sIS102.id) await prisma.subject.update({ where: { id: sIS201.id }, data: { prerequisiteId: sIS102.id } });
+  if (sIS202 && sIS102 && sIS202.prerequisiteId !== sIS102.id) await prisma.subject.update({ where: { id: sIS202.id }, data: { prerequisiteId: sIS102.id } });
+
+  // Professor user + record
+  const profPwd = await bcrypt.hash("professor123", 10);
+  const userProf = await prisma.user.upsert({ where: { email: "professor@richwell.edu" }, update: {}, create: { email: "professor@richwell.edu", password: profPwd, roleId: professorRole.id, status: "active" } });
+  const professorMain = await prisma.professor.upsert({ where: { userId: userProf.id }, update: { department: "IT Department", employmentStatus: "Full-time" }, create: { userId: userProf.id, department: "IT Department", employmentStatus: "Full-time" } });
+
+  // Sections
+  const secIS101 = await prisma.section.upsert({ where: { name: "BSIS-IS101-A" }, update: { subjectId: (await prisma.subject.findUnique({ where: { code: "IS101" } })).id, professorId: professorMain.id, maxSlots: 30, availableSlots: 30, semester: "first", schoolYear: "2025-2026" }, create: { name: "BSIS-IS101-A", subjectId: (await prisma.subject.findUnique({ where: { code: "IS101" } })).id, professorId: professorMain.id, maxSlots: 30, availableSlots: 30, semester: "first", schoolYear: "2025-2026" } });
+  const secIS102 = await prisma.section.upsert({ where: { name: "BSIS-1B" }, update: { subjectId: (await prisma.subject.findUnique({ where: { code: "IS102" } })).id, professorId: professorMain.id, maxSlots: 25, availableSlots: 25, semester: "first", schoolYear: "2025-2026" }, create: { name: "BSIS-1B", subjectId: (await prisma.subject.findUnique({ where: { code: "IS102" } })).id, professorId: professorMain.id, maxSlots: 25, availableSlots: 25, semester: "first", schoolYear: "2025-2026" } });
+
+  // Students (current + new)
+  const studPwd = await bcrypt.hash("student123", 10);
+  const userJuan = await prisma.user.upsert({ where: { email: "juan@richwell.edu" }, update: {}, create: { email: "juan@richwell.edu", password: studPwd, roleId: studentRole.id, status: "active" } });
+  const juan = await prisma.student.upsert({ where: { userId: userJuan.id }, update: {}, create: { userId: userJuan.id, studentNo: "2025-001", programId: bsis.id, yearLevel: 2, hasInc: true, status: "regular" } });
+  const userAna = await prisma.user.upsert({ where: { email: "ana@richwell.edu" }, update: {}, create: { email: "ana@richwell.edu", password: studPwd, roleId: studentRole.id, status: "active" } });
+  await prisma.student.upsert({ where: { userId: userAna.id }, update: {}, create: { userId: userAna.id, studentNo: "2025-002", programId: bsis.id, yearLevel: 1, status: "regular" } });
+
+  // Grade INC for Juan on IS102
+  if (sIS102 && activeTerm && secIS102) {
+    const profForGrade = (typeof professorMain !== 'undefined' && professorMain) || await prisma.professor.findFirst();
+    await prisma.grade.create({
       data: {
-        fullName: a.fullName,
-        email: a.email,
-        programId: a.programId,
-        status: a.status,
-        submittedAt: a.submittedAt,
-        processedById: a.status !== "pending" ? admissionUser?.id : null,
-        documents: {
-          create: [
-            { filename: "Form138.pdf", mimeType: "application/pdf" },
-            { filename: "BirthCertificate.jpg", mimeType: "image/jpeg" },
-          ],
+        gradeValue: "INC",
+        remarks: "Incomplete",
+        encodedById: profForGrade?.id || (await prisma.professor.create({ data: { userId: userProf.id, department: "IT Department", employmentStatus: "Full-time" } })).id,
+        enrollmentSubject: {
+          create: {
+            enrollment: { create: { studentId: juan.id, termId: activeTerm.id, totalUnits: 3, status: "confirmed" } },
+            subjectId: sIS102.id,
+            sectionId: secIS102.id,
+            units: 3,
+          },
         },
       },
     });
   }
-  console.log("Sample applicants added");
+  console.log("Advising test data ready");
+
+  // Enrollment records to exercise dashboard counts and series
+  // Confirmed enrollment for Ana in IS101 (if not exists)
+  const anaStudent = await prisma.student.findFirst({ where: { user: { email: "ana@richwell.edu" } } });
+  if (anaStudent && activeTerm && secIS101) {
+    const exists = await prisma.enrollment.findUnique({ where: { studentId_termId: { studentId: anaStudent.id, termId: activeTerm.id } } });
+    if (!exists) {
+      const e = await prisma.enrollment.create({ data: { studentId: anaStudent.id, termId: activeTerm.id, totalUnits: 3, status: "confirmed" } });
+      const subjIS101 = await prisma.subject.findUnique({ where: { code: "IS101" } });
+      await prisma.enrollmentSubject.create({ data: { enrollmentId: e.id, sectionId: secIS101.id, subjectId: subjIS101.id, units: 3 } });
+    }
+  }
+
+  // Pending enrollment for Ben
+  const benPwd = await bcrypt.hash("student123", 10);
+  const userBen = await prisma.user.upsert({ where: { email: "ben@richwell.edu" }, update: {}, create: { email: "ben@richwell.edu", password: benPwd, roleId: studentRole.id, status: "active" } });
+  const ben = await prisma.student.upsert({ where: { userId: userBen.id }, update: {}, create: { userId: userBen.id, studentNo: "2025-003", programId: bsis.id, yearLevel: 1, status: "regular" } });
+  const benEnroll = await prisma.enrollment.findUnique({ where: { studentId_termId: { studentId: ben.id, termId: activeTerm.id } } });
+  if (!benEnroll) {
+    await prisma.enrollment.create({ data: { studentId: ben.id, termId: activeTerm.id, totalUnits: 0, status: "pending" } });
+  }
+
+  // Cancelled enrollment for Cara in IS101
+  const caraPwd = await bcrypt.hash("student123", 10);
+  const userCara = await prisma.user.upsert({ where: { email: "cara@richwell.edu" }, update: {}, create: { email: "cara@richwell.edu", password: caraPwd, roleId: studentRole.id, status: "active" } });
+  const cara = await prisma.student.upsert({ where: { userId: userCara.id }, update: {}, create: { userId: userCara.id, studentNo: "2025-004", programId: bsis.id, yearLevel: 1, status: "regular" } });
+  const caraEnroll = await prisma.enrollment.findUnique({ where: { studentId_termId: { studentId: cara.id, termId: activeTerm.id } } });
+  if (!caraEnroll && secIS101) {
+    const e = await prisma.enrollment.create({ data: { studentId: cara.id, termId: activeTerm.id, totalUnits: 3, status: "cancelled" } });
+    const subjIS101 = await prisma.subject.findUnique({ where: { code: "IS101" } });
+    await prisma.enrollmentSubject.create({ data: { enrollmentId: e.id, sectionId: secIS101.id, subjectId: subjIS101.id, units: 3 } });
+  }
 
   console.log("Seeding completed successfully!");
 }

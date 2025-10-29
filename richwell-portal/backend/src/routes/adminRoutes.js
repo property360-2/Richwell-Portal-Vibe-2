@@ -21,12 +21,25 @@ import {
 
 const router = express.Router();
 
-// Admin-only protection for all routes under /api/admin
+// Allow admission to manage/view programs and lookups similar to admin
+router.get("/programs", protect, authorizeRoles("admin", "admission"), getPrograms);
+router.post("/programs", protect, authorizeRoles("admin", "admission"), createProgram);
+router.put("/programs/:id", protect, authorizeRoles("admin", "admission"), updateProgram);
+router.delete("/programs/:id", protect, authorizeRoles("admin", "admission"), deleteProgram);
+
+router.get("/departments", protect, authorizeRoles("admin", "admission"), getDepartments);
+router.post("/departments", protect, authorizeRoles("admin", "admission"), createDepartment);
+
+router.get("/sectors", protect, authorizeRoles("admin", "admission"), getSectors);
+router.post("/sectors", protect, authorizeRoles("admin", "admission"), createSector);
+
+router.get("/analytics", protect, authorizeRoles("admin", "admission"), getAnalytics);
+
+// Admin-only protection for all other routes under /api/admin
 router.use(protect, authorizeRoles("admin"));
 
 router.get("/dashboard", getDashboardData);
-
-router.get("/programs", getPrograms);
+// Program CRUD for admin only (admission already allowed above)
 router.post("/programs", createProgram);
 router.put("/programs/:id", updateProgram);
 router.delete("/programs/:id", deleteProgram);
@@ -41,7 +54,7 @@ router.put("/settings", updateSettings);
 
 router.get("/analytics", getAnalytics);
 
-// lookups
+// lookups (admin-only versions; admission already allowed above)
 router.get("/sectors", getSectors);
 router.get("/departments", getDepartments);
 router.post("/sectors", createSector);

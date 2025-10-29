@@ -6,21 +6,27 @@ import api from "../../services/api";
 
 export default function AdmissionDashboard() {
   const user = useAuthStore((s) => s.user);
-  const [stats, setStats] = useState({ total: 0, accepted: 0, rejected: 0, pending: 0, series: [] });
+  const [stats, setStats] = useState({ total: 0, confirmed: 0, cancelled: 0, pending: 0, series: [], range: { days: 14 } });
+  const [days, setDays] = useState(14);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  useEffect(() => {
+  const load = () => {
     setLoading(true);
     api
-      .get("/admission/dashboard")
+      .get("/admission/dashboard", { params: { days } })
       .then((res) => {
-        setStats(res.data?.data || { total: 0, accepted: 0, rejected: 0, pending: 0, series: [] });
+        setStats(res.data?.data || { total: 0, confirmed: 0, cancelled: 0, pending: 0, series: [], range: { days } });
         setError("");
       })
       .catch((err) => setError(err.response?.data?.message || "Failed to load dashboard"))
       .finally(() => setLoading(false));
-  }, []);
+  };
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [days]);
 
   return (
     <SidebarLayout>
@@ -34,14 +40,26 @@ export default function AdmissionDashboard() {
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <Card icon={<Users size={20} />} label="Total Applicants" value={stats.total} loading={loading} color="purple" />
-        <Card icon={<CheckCircle size={20} />} label="Accepted" value={stats.accepted} loading={loading} color="green" />
-        <Card icon={<XCircle size={20} />} label="Rejected" value={stats.rejected} loading={loading} color="red" />
+        <Card icon={<Users size={20} />} label="Total Enrollments" value={stats.total} loading={loading} color="purple" />
+        <Card icon={<CheckCircle size={20} />} label="Confirmed" value={stats.confirmed} loading={loading} color="green" />
+        <Card icon={<XCircle size={20} />} label="Cancelled" value={stats.cancelled} loading={loading} color="red" />
         <Card icon={<UserPlus size={20} />} label="Pending" value={stats.pending} loading={loading} color="amber" />
       </div>
 
       <div className="bg-gray-800 p-5 rounded-xl border border-gray-700">
-        <h2 className="text-lg font-semibold mb-3 text-purple-400">Applicants Over Time</h2>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-lg font-semibold text-purple-400">Enrollments Over Time</h2>
+          <select
+            value={days}
+            onChange={(e) => setDays(parseInt(e.target.value, 10))}
+            className="bg-gray-900 border border-gray-700 rounded px-2 py-1 text-xs outline-none"
+          >
+            <option value={7}>Last 7 days</option>
+            <option value={14}>Last 14 days</option>
+            <option value={30}>Last 30 days</option>
+            <option value={90}>Last 90 days</option>
+          </select>
+        </div>
         <LineChartPlaceholder data={stats.series} loading={loading} />
       </div>
     </SidebarLayout>
@@ -82,4 +100,3 @@ function LineChartPlaceholder({ data = [], loading }) {
     </div>
   );
 }
-

@@ -6,9 +6,13 @@ import {
   listApplicants,
   getApplicant,
   updateApplicant,
+  deleteApplicant,
   setApplicantStatus,
   createStudentFromApplicant,
   getAdmissionDashboard,
+  searchStudents,
+  adviseEnrollment,
+  submitEnrollment,
 } from "../controllers/admissionController.js";
 
 const router = express.Router();
@@ -23,10 +27,13 @@ router.post("/applicants", createApplicant);
 router.get("/applicants", listApplicants);
 router.get("/applicants/:id", getApplicant);
 router.put("/applicants/:id", updateApplicant);
+router.delete("/applicants/:id", deleteApplicant);
 router.put("/applicants/:id/status", setApplicantStatus);
 router.post("/applicants/:id/create-student", createStudentFromApplicant);
 
-// Enrollment (example legacy)
-router.post("/enroll", createStudentEnrollment);
+// Enrollment (unified)
+router.get("/students/search", searchStudents);
+router.get("/enroll/advice", adviseEnrollment);
+router.post("/enroll", submitEnrollment);
 
 export default router;

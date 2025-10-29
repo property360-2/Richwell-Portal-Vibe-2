@@ -4,7 +4,7 @@ import { useAuthStore } from "../../store/useAuthStore";
 import AuthLayout from "../../layouts/AuthLayout";
 
 export default function Login() {
-  const { login, loading, error, user } = useAuthStore();
+  const { login, loading, error } = useAuthStore();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const navigate = useNavigate();
@@ -23,8 +23,6 @@ export default function Login() {
           <label className="text-gray-400 text-sm">Email</label>
           <input
             type="email"
-            name="email"
-            autoComplete="email"
             className="w-full bg-gray-800 p-3 rounded-lg text-gray-200 outline-none mt-1"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
@@ -36,8 +34,6 @@ export default function Login() {
           <label className="text-gray-400 text-sm">Password</label>
           <input
             type="password"
-            name="password"
-            autoComplete="current-password"
             className="w-full bg-gray-800 p-3 rounded-lg text-gray-200 outline-none mt-1"
             value={password}
             onChange={(e) => setPassword(e.target.value)}

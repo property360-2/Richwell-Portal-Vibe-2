@@ -237,17 +237,27 @@ export const updateSettings = async (req, res) => {
 };
 
 // Analytics (mock data shape)
-export const getAnalytics = async (_req, res) => {
+export const getAnalytics = async (req, res) => {
   try {
-    return res.json({
-      success: true,
-      data: {
-        enrollmentTrend: [12, 18, 25, 21, 30, 28],
-        gradeDistribution: { A: 32, B: 48, C: 15, D: 4, F: 1 },
-        admissions: { accepted: 120, pending: 34, rejected: 12 },
-        roles: { student: 100, professor: 20, registrar: 3, admission: 3, dean: 1, admin: 1 },
-      },
-    });
+    const [statusRows, perProgramRows, trendRows, missingDocsRows] = await Promise.all([
+      prisma.$queryRaw`SELECT status, COUNT(*) AS count FROM applicants GROUP BY status`,
+      prisma.$queryRaw`SELECT p.id, p.code, p.name, COUNT(a.id) AS count
+                       FROM programs p
+                       LEFT JOIN applicants a ON a.programId = p.id
+                       GROUP BY p.id, p.code, p.name
+                       ORDER BY count DESC`,
+      prisma.$queryRaw`SELECT DATE_FORMAT(submittedAt, '%Y-%m-01') AS month, COUNT(*) AS count FROM applicants GROUP BY month ORDER BY month ASC`,
+      prisma.$queryRaw`SELECT COUNT(*) AS count FROM applicants a WHERE NOT EXISTS (SELECT 1 FROM applicant_documents d WHERE d.applicantId = a.id)`,
+    ]);
+
+    const admissions = {};
+    (statusRows || []).forEach((r) => { admissions[String(r.status)] = Number(r.count || 0); });
+
+    const perProgram = (perProgramRows || []).map((r) => ({ id: r.id, code: r.code, name: r.name, count: Number(r.count || 0) }));
+    const trend = (trendRows || []).map((r) => ({ month: String(r.month), count: Number(r.count || 0) }));
+    const missingDocs = Number(missingDocsRows?.[0]?.count || 0);
+
+    return res.json({ success: true, data: { admissions, perProgram, trend, missingDocs } });
   } catch (err) {
     console.error("ADMIN getAnalytics error:", err);
     return res.status(500).json({ success: false, message: "Server error" });

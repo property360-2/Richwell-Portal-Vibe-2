@@ -23,8 +23,8 @@ export default function SidebarLayout({ children }) {
     ],
     admission: [
       { to: "/admission/dashboard", label: "Dashboard", icon: <Home size={18} /> },
-      { to: "/admission/applicants", label: "Applicants", icon: <Users size={18} /> },
       { to: "/admission/enroll", label: "Enroll Form", icon: <FileText size={18} /> },
+      { to: "/admission/programs", label: "Programs", icon: <FileText size={18} /> },
       { to: "/admission/analytics", label: "Analytics", icon: <BarChart2 size={18} /> },
     ],
     dean: [

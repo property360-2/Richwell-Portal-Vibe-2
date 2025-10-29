@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import SidebarLayout from "../../layouts/SidebarLayout";
 import api from "../../services/api";
+import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip as RTooltip, BarChart, Bar, XAxis, YAxis, LineChart, Line, CartesianGrid, Legend } from "recharts";
 
 export default function AdmissionAnalytics() {
   const [programs, setPrograms] = useState([]);
@@ -47,16 +48,51 @@ export default function AdmissionAnalytics() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Widget title="Application Status (Donut)">
-          <Placeholder />
-          {!loading && data && (
-            <div className="text-xs text-gray-300 mt-2">
-              {Object.entries(data.admissions || {}).map(([k, v]) => <span key={k} className="mr-3">{k}: {v}</span>)}
+          {loading ? <Placeholder /> : (
+            <div className="h-64">
+              <ResponsiveContainer>
+                <PieChart>
+                  <Pie dataKey="value" data={Object.entries(data?.admissions || {}).map(([k,v])=>({ name:k, value:Number(v)}))} outerRadius={100} label>
+                    {Object.entries(data?.admissions || {}).map((_, idx)=> <Cell key={idx} fill={["#8b5cf6","#10b981","#ef4444","#f59e0b"][idx % 4]} />)}
+                  </Pie>
+                  <RTooltip />
+                </PieChart>
+              </ResponsiveContainer>
             </div>
           )}
         </Widget>
-        <Widget title="Applications per Program (Bar)"><Placeholder /></Widget>
-        <Widget title="Application Trends per Month (Line)"><Placeholder /></Widget>
-        <Widget title="Conversion Rate (Table)"><Placeholder /></Widget>
+        <Widget title="Applications per Program (Bar)">
+          {loading ? <Placeholder /> : (
+            <div className="h-64">
+              <ResponsiveContainer>
+                <BarChart data={(data?.perProgram||[]).map(r=>({ name: r.code, count: r.count }))}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" />
+                  <YAxis />
+                  <RTooltip />
+                  <Legend />
+                  <Bar dataKey="count" fill="#60a5fa" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </Widget>
+        <Widget title="Application Trends per Month (Line)">
+          {loading ? <Placeholder /> : (
+            <div className="h-64">
+              <ResponsiveContainer>
+                <LineChart data={(data?.trend||[]).map(r=>({ month: r.month, count: r.count }))}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="month" />
+                  <YAxis />
+                  <RTooltip />
+                  <Legend />
+                  <Line type="monotone" dataKey="count" stroke="#34d399" />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </Widget>
         <Widget title="Average Processing Time (Card)"><MiniCard value={data?.avgProcessing || "--"} /></Widget>
         <Widget title="Total Missing Documents (Card)"><MiniCard value={data?.missingDocs || "--"} /></Widget>
       </div>
@@ -73,11 +109,8 @@ function Widget({ title, children }) {
   );
 }
 
-function Placeholder() {
-  return <div className="h-48 bg-gray-900 rounded" />;
-}
+function Placeholder() { return <div className="h-48 bg-gray-900 rounded" />; }
 
 function MiniCard({ value }) {
   return <div className="h-24 bg-gray-900 rounded grid place-items-center text-2xl font-bold">{value}</div>;
 }
-
