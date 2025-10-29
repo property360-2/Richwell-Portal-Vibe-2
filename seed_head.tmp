@@ -1,0 +1,138 @@
+import { PrismaClient } from "@prisma/client";
+import bcrypt from "bcryptjs";
+
+const prisma = new PrismaClient();
+
+async function main() {
+  console.log("🌱 Starting seed...");
+
+  // 1️⃣ Create roles
+  const roles = ["student", "professor", "registrar", "admission", "dean", "admin"];
+  for (const name of roles) {
+    await prisma.role.upsert({
+      where: { name },
+      update: {},
+      create: { name },
+    });
+  }
+  console.log("✅ Roles created");
+
+  // 2️⃣ Create admin user
+  const adminEmail = "admin@richwell.edu";
+  const adminPassword = await bcrypt.hash("admin123", 10);
+  const adminRole = await prisma.role.findUnique({ where: { name: "admin" } });
+
+  await prisma.user.upsert({
+    where: { email: adminEmail },
+    update: {},
+    create: {
+      email: adminEmail,
+      password: adminPassword,
+      roleId: adminRole.id,
+      status: "active",
+    },
+  });
+  console.log("✅ Admin account created → admin@richwell.edu / admin123");
+
+  // 3️⃣ Create sample programs
+  const programs = [
+    { code: "BSIS", name: "Bachelor of Science in Information System" },
+    { code: "BSCE", name: "Bachelor of Science in Civil Engineering" },
+    { code: "BSN", name: "Bachelor of Science in Nursing" },
+  ];
+
+  for (const program of programs) {
+    await prisma.program.upsert({
+      where: { code: program.code },
+      update: {},
+      create: { code: program.code, name: program.name },
+    });
+  }
+  console.log("✅ Programs seeded");
+
+  // 4️⃣ Create sample subjects
+  const bsisProgram = await prisma.program.findUnique({ where: { code: "BSIS" } });
+  const subjects = [
+    {
+      code: "IT101",
+      name: "Introduction to Computing",
+      units: 3,
+      subjectType: "major",
+      programId: bsisProgram.id,
+      recommendedYear: "1st",
+      recommendedSemester: "first",
+    },
+    {
+      code: "IT102",
+      name: "Computer Programming 1",
+      units: 3,
+      subjectType: "major",
+      programId: bsisProgram.id,
+      recommendedYear: "1st",
+      recommendedSemester: "first",
+    },
+  ];
+
+  for (const subject of subjects) {
+    await prisma.subject.upsert({
+      where: { code: subject.code },
+      update: {},
+      create: subject,
+    });
+  }
+  console.log("✅ Subjects added");
+
+  // 5️⃣ Create sample professor
+  const profPassword = await bcrypt.hash("prof123", 10);
+  const profRole = await prisma.role.findUnique({ where: { name: "professor" } });
+
+  const profUser = await prisma.user.upsert({
+    where: { email: "prof.juan@richwell.edu" },
+    update: {},
+    create: {
+      email: "prof.juan@richwell.edu",
+      password: profPassword,
+      roleId: profRole.id,
+    },
+  });
+
+  const professor = await prisma.professor.upsert({
+    where: { userId: profUser.id },
+    update: {},
+    create: {
+      userId: profUser.id,
+      department: "Information Systems",
+      employmentStatus: "full-time",
+    },
+  });
+  console.log("✅ Sample professor created");
+
+  // 6️⃣ Create sample section
+  const subject = await prisma.subject.findUnique({ where: { code: "IT101" } });
+  await prisma.section.upsert({
+    where: { name: "BSIS-1A" },
+    update: {},
+    create: {
+      name: "BSIS-1A",
+      subjectId: subject.id,
+      professorId: professor.id,
+      maxSlots: 40,
+      availableSlots: 40,
+      semester: "first",
+      schoolYear: "2025-2026",
+      schedule: "MWF 8:00AM - 10:00AM",
+    },
+  });
+  console.log("✅ Section BSIS-1A added");
+
+  console.log("🎉 Seeding completed successfully!");
+}
+
+main()
+  .catch((e) => {
+    console.error(e);
+    process.exit(1);
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
+  });

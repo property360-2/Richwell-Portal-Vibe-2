@@ -1,0 +1,398 @@
+// ============================
+//  PRISMA CONFIGURATION
+// ============================
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================
+//  ENUMS
+// ============================
+enum UserStatus {
+  active
+  inactive
+}
+
+enum StudentStatus {
+  regular
+  irregular
+  inactive
+}
+
+enum SubjectType {
+  major
+  minor
+}
+
+enum EnrollmentStatus {
+  pending
+  confirmed
+  cancelled
+}
+
+enum Semester {
+  first
+  second
+  summer
+}
+
+enum GradeValue {
+  ONE_ZERO        @map("1.0")
+  ONE_TWENTYFIVE  @map("1.25")
+  ONE_FIVE        @map("1.5")
+  ONE_SEVENTYFIVE @map("1.75")
+  TWO_ZERO        @map("2.0")
+  TWO_TWENTYFIVE  @map("2.25")
+  TWO_FIVE        @map("2.5")
+  TWO_SEVENTYFIVE @map("2.75")
+  THREE_ZERO      @map("3.0")
+  FOUR_ZERO       @map("4.0")
+  FIVE_ZERO       @map("5.0")
+  INC
+  DRP
+}
+
+// ============================
+//  NEW ENUMS FOR ADMIN MODELS
+// ============================
+enum CurriculumStatus {
+  active
+  archived
+}
+
+// ============================
+//  NEW ADMISSION ENUMS
+// ============================
+enum ApplicantStatus {
+  pending
+  accepted
+  rejected
+}
+
+// ============================
+//  A. USER & ROLE MANAGEMENT
+// ============================
+model Role {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique @db.VarChar(50)
+  users     User[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("roles")
+}
+
+model User {
+  id        Int        @id @default(autoincrement())
+  email     String     @unique @db.VarChar(100)
+  password  String     @db.VarChar(255)
+  roleId    Int
+  status    UserStatus @default(active)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  role      Role       @relation(fields: [roleId], references: [id])
+  student   Student?
+  professor Professor?
+  logs      AnalyticsLog[]
+
+  @@index([roleId])
+  @@map("users")
+}
+
+// ============================
+//  B. STUDENT & PROFESSOR INFO
+// ============================
+model Student {
+  id         Int           @id @default(autoincrement())
+  userId     Int           @unique
+  studentNo  String        @unique @db.VarChar(50)
+  programId  Int
+  yearLevel  Int
+  gpa        Decimal?      @db.Decimal(3, 2)
+  hasInc     Boolean       @default(false)
+  status     StudentStatus @default(regular)
+
+  user        User          @relation(fields: [userId], references: [id])
+  program     Program       @relation(fields: [programId], references: [id])
+  enrollments Enrollment[]
+  resolutions IncResolution[]
+
+  @@index([programId])
+  @@map("students")
+}
+
+model Professor {
+  id               Int      @id @default(autoincrement())
+  userId           Int      @unique
+  department       String
+  employmentStatus String   @db.VarChar(50)
+
+  user          User           @relation(fields: [userId], references: [id])
+  sections      Section[]
+  encodedGrades Grade[]
+  resolutions   IncResolution[]
+
+  @@map("professors")
+}
+
+// ============================
+//  C. ACADEMIC & CURRICULUM DATA
+// ============================
+model Program {
+  id            Int          @id @default(autoincrement())
+  name          String       @db.VarChar(100)
+  code          String       @unique @db.VarChar(20)
+  description   String?
+  departmentId  Int
+  sectorId      Int
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  subjects      Subject[]
+  students      Student[]
+  curriculums   Curriculum[]
+
+  department    Department   @relation(fields: [departmentId], references: [id])
+  sector        Sector       @relation(fields: [sectorId], references: [id])
+
+  @@index([departmentId])
+  @@index([sectorId])
+  @@map("programs")
+}
+
+model Subject {
+  id                   Int          @id @default(autoincrement())
+  code                 String       @unique @db.VarChar(20)   // ✅ unique for seeding upsert
+  name                 String       @db.VarChar(100)
+  units                Int
+  subjectType          SubjectType
+  yearStanding         String?      @db.VarChar(10)
+  recommendedYear      String?      @db.VarChar(10)
+  recommendedSemester  Semester?
+  programId            Int
+  prerequisiteId       Int?
+
+  program              Program      @relation(fields: [programId], references: [id])
+  prerequisite         Subject?     @relation("SubjectPrerequisite", fields: [prerequisiteId], references: [id])
+  hasPrerequisite      Subject[]    @relation("SubjectPrerequisite")
+  sections             Section[]
+  enrollmentSubjects   EnrollmentSubject[]
+  resolutions          IncResolution[]
+
+  @@index([programId])
+  @@index([prerequisiteId])
+  @@map("subjects")
+}
+
+// ============================
+//  NEW ADMIN DOMAIN MODELS
+// ============================
+model Department {
+  id        Int        @id @default(autoincrement())
+  name      String     @unique @db.VarChar(100)
+  code      String?    @unique @db.VarChar(20)
+  programs  Program[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  @@map("departments")
+}
+
+model Sector {
+  id          Int        @id @default(autoincrement())
+  name        String     @unique @db.VarChar(50)
+  description String?
+  programs    Program[]
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@map("sectors")
+}
+
+model Curriculum {
+  id         Int               @id @default(autoincrement())
+  programId  Int
+  startYear  Int
+  endYear    Int
+  status     CurriculumStatus  @default(active)
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+
+  program    Program           @relation(fields: [programId], references: [id])
+
+  @@index([programId])
+  @@unique([programId, startYear])
+  @@map("curriculums")
+}
+
+// ============================
+//  ADMISSION MODELS
+// ============================
+model Applicant {
+  id            Int             @id @default(autoincrement())
+  fullName      String          @db.VarChar(150)
+  email         String          @db.VarChar(150)
+  programId     Int
+  status        ApplicantStatus @default(pending)
+  notes         String?
+  submittedAt   DateTime        @default(now())
+  processedById Int?
+
+  program       Program         @relation(fields: [programId], references: [id])
+  processedBy   User?           @relation(fields: [processedById], references: [id])
+  documents     ApplicantDocument[]
+
+  @@index([programId])
+  @@index([status])
+  @@index([submittedAt])
+  @@map("applicants")
+}
+
+model ApplicantDocument {
+  id           Int       @id @default(autoincrement())
+  applicantId  Int
+  filename     String
+  mimeType     String?
+  url          String?
+  uploadedAt   DateTime  @default(now())
+
+  applicant    Applicant @relation(fields: [applicantId], references: [id])
+
+  @@index([applicantId])
+  @@map("applicant_documents")
+}
+
+model Section {
+  id              Int          @id @default(autoincrement())
+  name            String       @unique @db.VarChar(50)   // ✅ allow upsert by name (your seed)
+  subjectId       Int
+  professorId     Int
+  maxSlots        Int
+  availableSlots  Int
+  semester        Semester     // ✅ enum instead of string
+  schoolYear      String       @db.VarChar(15)
+  schedule        String?
+  status          String       @default("open")
+
+  subject         Subject      @relation(fields: [subjectId], references: [id])
+  professor       Professor    @relation(fields: [professorId], references: [id])
+  enrollmentSubs  EnrollmentSubject[]
+
+  @@index([subjectId])
+  @@index([professorId])
+  @@map("sections")
+}
+
+model AcademicTerm {
+  id          Int        @id @default(autoincrement())
+  schoolYear  String     @db.VarChar(15)
+  semester    Semester
+  isActive    Boolean    @default(false)
+  enrollments Enrollment[]
+
+  @@map("academic_terms")
+}
+
+// ============================
+//  D. ENROLLMENT & GRADES
+// ============================
+model Enrollment {
+  id           Int              @id @default(autoincrement())
+  studentId    Int
+  termId       Int
+  dateEnrolled DateTime         @default(now())
+  totalUnits   Int?
+  status       EnrollmentStatus @default(pending)
+
+  student      Student          @relation(fields: [studentId], references: [id])
+  term         AcademicTerm     @relation(fields: [termId], references: [id])
+  subjects     EnrollmentSubject[]
+
+  // ✅ one enrollment per student per term
+  @@unique([studentId, termId])
+
+  @@index([studentId])
+  @@index([termId])
+  @@map("enrollments")
+}
+
+model EnrollmentSubject {
+  id            Int         @id @default(autoincrement())
+  enrollmentId  Int
+  sectionId     Int
+  subjectId     Int
+  units         Int
+
+  enrollment    Enrollment  @relation(fields: [enrollmentId], references: [id])
+  section       Section     @relation(fields: [sectionId], references: [id])
+  subject       Subject     @relation(fields: [subjectId], references: [id])
+  grades        Grade[]
+
+  // ✅ prevent duplicate subject in same enrollment
+  @@unique([enrollmentId, subjectId])
+
+  @@index([enrollmentId])
+  @@index([sectionId])
+  @@index([subjectId])
+  @@map("enrollment_subjects")
+}
+
+model Grade {
+  id                  Int         @id @default(autoincrement())
+  enrollmentSubjectId Int
+  gradeValue          GradeValue
+  remarks             String?
+  encodedById         Int
+  approved            Boolean     @default(false)
+  dateEncoded         DateTime    @default(now())
+  repeatEligibleDate  DateTime?
+
+  enrollmentSubject   EnrollmentSubject @relation(fields: [enrollmentSubjectId], references: [id])
+  professor           Professor         @relation(fields: [encodedById], references: [id])
+
+  @@index([enrollmentSubjectId])
+  @@index([encodedById])
+  @@map("grades")
+}
+
+// ============================
+//  E. INC RESOLUTION & LOGS
+// ============================
+model IncResolution {
+  id                  Int         @id @default(autoincrement())
+  studentId           Int
+  subjectId           Int
+  oldGrade            GradeValue
+  newGrade            GradeValue
+  professorId         Int
+  approvedByRegistrar Boolean     @default(false)
+  dateSubmitted       DateTime    @default(now())
+
+  student             Student     @relation(fields: [studentId], references: [id])
+  subject             Subject     @relation(fields: [subjectId], references: [id])
+  professor           Professor   @relation(fields: [professorId], references: [id])
+
+  @@index([studentId])
+  @@index([subjectId])
+  @@index([professorId])
+  @@map("inc_resolutions")
+}
+
+model AnalyticsLog {
+  id          Int       @id @default(autoincrement())
+  userId      Int
+  action      String
+  description String?
+  timestamp   DateTime  @default(now())
+
+  user        User      @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@map("analytics_logs")
+}
