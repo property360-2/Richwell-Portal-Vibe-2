@@ -1,116 +1,83 @@
-import { useEffect, useState } from "react";
-import SidebarLayout from "../../layouts/SidebarLayout";
-import api from "../../services/api";
-import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip as RTooltip, BarChart, Bar, XAxis, YAxis, LineChart, Line, CartesianGrid, Legend } from "recharts";
+import { useMemo } from "react";
+import { Pie, PieChart, Cell, ResponsiveContainer, Tooltip } from "recharts";
+import { useAuth } from "../../context/AuthContext.jsx";
+
+const COLORS = ["#F9D74C", "#9575CD", "#6A1B9A"];
 
 export default function AdmissionAnalytics() {
-  const [programs, setPrograms] = useState([]);
-  const [departments, setDepartments] = useState([]);
-  const [filters, setFilters] = useState({ term: "1st", programId: "", departmentId: "" });
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const { portalData } = useAuth();
 
-  useEffect(() => {
-    Promise.all([api.get("/admin/programs"), api.get("/admin/departments")]).then(([p, d]) => {
-      setPrograms(p.data?.data || []);
-      setDepartments(d.data?.data || []);
-    });
-  }, []);
+  const summary = useMemo(() => {
+    const total = portalData.enrollmentLogs.length || 1;
+    const newCount = portalData.enrollmentLogs.filter((log) => log.mode === "new").length;
+    const continuingCount = portalData.enrollmentLogs.filter((log) => log.mode === "existing").length;
+    return {
+      total,
+      newCount,
+      continuingCount,
+      newPercent: Math.round((newCount / total) * 100),
+      continuingPercent: Math.round((continuingCount / total) * 100),
+    };
+  }, [portalData.enrollmentLogs]);
 
-  useEffect(() => {
-    setLoading(true);
-    api
-      .get("/admin/analytics", { params: { term: filters.term, programId: filters.programId || undefined, departmentId: filters.departmentId || undefined } })
-      .then((res) => setData(res.data?.data || null))
-      .finally(() => setLoading(false));
-  }, [filters]);
+  const pieData = [
+    { name: "New", value: summary.newCount },
+    { name: "Continuing", value: summary.continuingCount },
+    { name: "Slots remaining", value: Math.max(1, 50 - summary.total) },
+  ];
 
   return (
-    <SidebarLayout>
-      <div className="flex items-center justify-between mb-4">
-        <h1 className="text-2xl font-semibold">Admission Analytics</h1>
-        <div className="flex items-center gap-2">
-          <select value={filters.term} onChange={(e) => setFilters((f) => ({ ...f, term: e.target.value }))} className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm">
-            <option>1st</option>
-            <option>2nd</option>
-            <option>Summer</option>
-          </select>
-          <select value={filters.departmentId} onChange={(e) => setFilters((f) => ({ ...f, departmentId: e.target.value }))} className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm">
-            <option value="">All Departments</option>
-            {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-          </select>
-          <select value={filters.programId} onChange={(e) => setFilters((f) => ({ ...f, programId: e.target.value }))} className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm">
-            <option value="">All Programs</option>
-            {programs.map((p) => <option key={p.id} value={p.id}>{p.code} — {p.name}</option>)}
-          </select>
+    <div className="space-y-6">
+      <header className="space-y-1">
+        <p className="text-xs uppercase tracking-[0.3em] text-purple-400">Admission analytics</p>
+        <h1 className="text-2xl font-semibold text-yellow-400">Intake mix and pacing</h1>
+        <p className="text-sm text-slate-400">Visualize the balance between new and continuing enrollees.</p>
+      </header>
+
+      <section className="grid gap-4 lg:grid-cols-[360px,1fr]">
+        <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
+          <h2 className="text-lg font-semibold text-purple-300 mb-3">Composition snapshot</h2>
+          <p className="text-sm text-slate-400">{summary.total} enrolments recorded in this local session.</p>
+          <dl className="mt-4 space-y-2 text-sm text-slate-300">
+            <div className="flex items-center justify-between">
+              <dt>New applicants</dt>
+              <dd className="text-yellow-300">{summary.newCount} ({summary.newPercent}%)</dd>
+            </div>
+            <div className="flex items-center justify-between">
+              <dt>Continuing students</dt>
+              <dd className="text-purple-300">{summary.continuingCount} ({summary.continuingPercent}%)</dd>
+            </div>
+            <div className="flex items-center justify-between">
+              <dt>Remaining target (50)</dt>
+              <dd className="text-slate-300">{Math.max(0, 50 - summary.total)} slots</dd>
+            </div>
+          </dl>
         </div>
-      </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <Widget title="Application Status (Donut)">
-          {loading ? <Placeholder /> : (
-            <div className="h-64">
-              <ResponsiveContainer>
-                <PieChart>
-                  <Pie dataKey="value" data={Object.entries(data?.admissions || {}).map(([k,v])=>({ name:k, value:Number(v)}))} outerRadius={100} label>
-                    {Object.entries(data?.admissions || {}).map((_, idx)=> <Cell key={idx} fill={["#8b5cf6","#10b981","#ef4444","#f59e0b"][idx % 4]} />)}
-                  </Pie>
-                  <RTooltip />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-          )}
-        </Widget>
-        <Widget title="Applications per Program (Bar)">
-          {loading ? <Placeholder /> : (
-            <div className="h-64">
-              <ResponsiveContainer>
-                <BarChart data={(data?.perProgram||[]).map(r=>({ name: r.code, count: r.count }))}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" />
-                  <YAxis />
-                  <RTooltip />
-                  <Legend />
-                  <Bar dataKey="count" fill="#60a5fa" />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          )}
-        </Widget>
-        <Widget title="Application Trends per Month (Line)">
-          {loading ? <Placeholder /> : (
-            <div className="h-64">
-              <ResponsiveContainer>
-                <LineChart data={(data?.trend||[]).map(r=>({ month: r.month, count: r.count }))}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="month" />
-                  <YAxis />
-                  <RTooltip />
-                  <Legend />
-                  <Line type="monotone" dataKey="count" stroke="#34d399" />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          )}
-        </Widget>
-        <Widget title="Average Processing Time (Card)"><MiniCard value={data?.avgProcessing || "--"} /></Widget>
-        <Widget title="Total Missing Documents (Card)"><MiniCard value={data?.missingDocs || "--"} /></Widget>
-      </div>
-    </SidebarLayout>
-  );
-}
-
-function Widget({ title, children }) {
-  return (
-    <div className="bg-gray-800 border border-gray-700 rounded-xl p-5">
-      <h2 className="font-semibold text-purple-400 mb-3">{title}</h2>
-      {children}
+        <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
+          <h2 className="text-lg font-semibold text-purple-300 mb-4">Enrollment mix</h2>
+          <div className="h-64">
+            <ResponsiveContainer>
+              <PieChart>
+                <Pie dataKey="value" data={pieData} cx="50%" cy="50%" outerRadius={100} label>
+                  {pieData.map((entry, index) => (
+                    <Cell key={entry.name} fill={COLORS[index % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: "#0f1729",
+                    borderRadius: "0.75rem",
+                    border: "1px solid #312e81",
+                    color: "#e2e8f0",
+                    fontSize: "0.75rem",
+                  }}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </section>
     </div>
   );
-}
-
-function Placeholder() { return <div className="h-48 bg-gray-900 rounded" />; }
-
-function MiniCard({ value }) {
-  return <div className="h-24 bg-gray-900 rounded grid place-items-center text-2xl font-bold">{value}</div>;
 }

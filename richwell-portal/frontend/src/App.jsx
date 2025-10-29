@@ -1,86 +1,95 @@
-import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
-import { useAuthStore } from "./store/useAuthStore";
-import { useEffect } from "react";
-import { ToastProvider } from "./components/ToastProvider";
-
-// Layouts
-import Login from "./pages/auth/Login";
-import StudentDashboard from "./pages/student/Dashboard";
-import ProfessorDashboard from "./pages/professor/Dashboard";
-import RegistrarDashboard from "./pages/registrar/Dashboard";
-import AdmissionDashboard from "./pages/admission/Dashboard";
-import AdmissionEnrollmentForm from "./pages/admission/EnrollmentForm";
-import AdmissionApplicants from "./pages/admission/Applicants";
-import AdmissionAnalytics from "./pages/admission/AdmissionAnalytics";
-import AdmissionPrograms from "./pages/admission/Programs";
-import DeanDashboard from "./pages/dean/Dashboard";
-import AdminDashboard from "./pages/admin/Dashboard";
-import AdminPrograms from "./pages/admin/Programs";
-import AdminCurriculum from "./pages/admin/Curriculum";
-import AdminSettings from "./pages/admin/Settings";
-import AdminAnalytics from "./pages/admin/Analytics";
+import { BrowserRouter as Router, Navigate, Route, Routes } from "react-router-dom";
+import Login from "./pages/auth/Login.jsx";
+import StudentDashboard from "./pages/student/Dashboard.jsx";
+import ProfessorDashboard from "./pages/professor/Dashboard.jsx";
+import RegistrarDashboard from "./pages/registrar/Dashboard.jsx";
+import AdmissionDashboard from "./pages/admission/Dashboard.jsx";
+import AdmissionEnrollmentForm from "./pages/admission/EnrollmentForm.jsx";
+import AdmissionApplicants from "./pages/admission/Applicants.jsx";
+import AdmissionAnalytics from "./pages/admission/AdmissionAnalytics.jsx";
+import AdmissionPrograms from "./pages/admission/Programs.jsx";
+import DeanDashboard from "./pages/dean/Dashboard.jsx";
+import AdminDashboard from "./pages/admin/Dashboard.jsx";
+import AdminPrograms from "./pages/admin/Programs.jsx";
+import AdminCurriculum from "./pages/admin/Curriculum.jsx";
+import AdminSettings from "./pages/admin/Settings.jsx";
+import AdminAnalytics from "./pages/admin/Analytics.jsx";
+import { useAuth } from "./context/AuthContext.jsx";
+import SidebarLayout from "./layouts/SidebarLayout.jsx";
 
 function ProtectedRoute({ children, role }) {
-  const { user, token, initialized } = useAuthStore();
-  if (!initialized) return (
-    <div className="h-screen grid place-items-center text-gray-300">Loading…</div>
-  );
-  if (!token || !user) return <Navigate to="/login" replace />;
-  if (role && user.role !== role) return <Navigate to={`/${user.role}/dashboard`} replace />;
+  const { user, token, initialized } = useAuth();
+
+  if (!initialized) {
+    return (
+      <div className="h-screen grid place-items-center bg-slate-950 text-slate-300">
+        Initializing portal…
+      </div>
+    );
+  }
+
+  if (!token || !user) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (role && user.role !== role) {
+    return <Navigate to={`/${user.role}/dashboard`} replace />;
+  }
+
   return children;
 }
 
 export default function App() {
-  const loadUser = useAuthStore((s) => s.loadUser);
-
-  useEffect(() => {
-    loadUser();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const { user } = useAuth();
 
   return (
-    <ToastProvider>
-      <Router>
-        <Routes>
-        {/* Auth */}
-        <Route path="/login" element={<Login />} />
+    <Router>
+      <Routes>
+        <Route
+          path="/login"
+          element={user ? <Navigate to={`/${user.role}/dashboard`} replace /> : <Login />}
+        />
 
-        {/* Student */}
         <Route
           path="/student/dashboard"
           element={
             <ProtectedRoute role="student">
-              <StudentDashboard />
+              <SidebarLayout>
+                <StudentDashboard />
+              </SidebarLayout>
             </ProtectedRoute>
           }
         />
 
-        {/* Professor */}
         <Route
           path="/professor/dashboard"
           element={
             <ProtectedRoute role="professor">
-              <ProfessorDashboard />
+              <SidebarLayout>
+                <ProfessorDashboard />
+              </SidebarLayout>
             </ProtectedRoute>
           }
         />
 
-        {/* Registrar */}
         <Route
           path="/registrar/dashboard"
           element={
             <ProtectedRoute role="registrar">
-              <RegistrarDashboard />
+              <SidebarLayout>
+                <RegistrarDashboard />
+              </SidebarLayout>
             </ProtectedRoute>
           }
         />
 
-        {/* Admission */}
         <Route
           path="/admission/dashboard"
           element={
             <ProtectedRoute role="admission">
-              <AdmissionDashboard />
+              <SidebarLayout>
+                <AdmissionDashboard />
+              </SidebarLayout>
             </ProtectedRoute>
           }
         />
@@ -88,7 +97,9 @@ export default function App() {
           path="/admission/enroll"
           element={
             <ProtectedRoute role="admission">
-              <AdmissionEnrollmentForm />
+              <SidebarLayout>
+                <AdmissionEnrollmentForm />
+              </SidebarLayout>
             </ProtectedRoute>
           }
         />
@@ -96,7 +107,9 @@ export default function App() {
           path="/admission/applicants"
           element={
             <ProtectedRoute role="admission">
-              <AdmissionApplicants />
+              <SidebarLayout>
+                <AdmissionApplicants />
+              </SidebarLayout>
             </ProtectedRoute>
           }
         />
@@ -104,7 +117,9 @@ export default function App() {
           path="/admission/analytics"
           element={
             <ProtectedRoute role="admission">
-              <AdmissionAnalytics />
+              <SidebarLayout>
+                <AdmissionAnalytics />
+              </SidebarLayout>
             </ProtectedRoute>
           }
         />
@@ -112,27 +127,31 @@ export default function App() {
           path="/admission/programs"
           element={
             <ProtectedRoute role="admission">
-              <AdmissionPrograms />
+              <SidebarLayout>
+                <AdmissionPrograms />
+              </SidebarLayout>
             </ProtectedRoute>
           }
         />
 
-        {/* Dean */}
         <Route
           path="/dean/dashboard"
           element={
             <ProtectedRoute role="dean">
-              <DeanDashboard />
+              <SidebarLayout>
+                <DeanDashboard />
+              </SidebarLayout>
             </ProtectedRoute>
           }
         />
 
-        {/* Admin */}
         <Route
           path="/admin/dashboard"
           element={
             <ProtectedRoute role="admin">
-              <AdminDashboard />
+              <SidebarLayout>
+                <AdminDashboard />
+              </SidebarLayout>
             </ProtectedRoute>
           }
         />
@@ -140,7 +159,9 @@ export default function App() {
           path="/admin/programs"
           element={
             <ProtectedRoute role="admin">
-              <AdminPrograms />
+              <SidebarLayout>
+                <AdminPrograms />
+              </SidebarLayout>
             </ProtectedRoute>
           }
         />
@@ -148,7 +169,9 @@ export default function App() {
           path="/admin/curriculum"
           element={
             <ProtectedRoute role="admin">
-              <AdminCurriculum />
+              <SidebarLayout>
+                <AdminCurriculum />
+              </SidebarLayout>
             </ProtectedRoute>
           }
         />
@@ -156,7 +179,9 @@ export default function App() {
           path="/admin/settings"
           element={
             <ProtectedRoute role="admin">
-              <AdminSettings />
+              <SidebarLayout>
+                <AdminSettings />
+              </SidebarLayout>
             </ProtectedRoute>
           }
         />
@@ -164,15 +189,15 @@ export default function App() {
           path="/admin/analytics"
           element={
             <ProtectedRoute role="admin">
-              <AdminAnalytics />
+              <SidebarLayout>
+                <AdminAnalytics />
+              </SidebarLayout>
             </ProtectedRoute>
           }
         />
 
-        {/* Default */}
-        <Route path="*" element={<Navigate to="/login" />} />
-        </Routes>
-      </Router>
-    </ToastProvider>
+        <Route path="*" element={<Navigate to="/login" replace />} />
+      </Routes>
+    </Router>
   );
 }
