@@ -1,7 +1,11 @@
 // src/controllers/admissionController.js
 
+import bcrypt from "bcryptjs";
 import { PrismaClient } from "@prisma/client";
 const prisma = new PrismaClient();
+
+const DEFAULT_STUDENT_PASSWORD =
+  process.env.DEFAULT_STUDENT_PASSWORD || "changeme123";
 
 // =============================
 // HELPER FUNCTIONS
@@ -131,6 +135,511 @@ async function getRepeatEligibleSubjects(studentId) {
 
   return Array.from(subjectMap.values());
 }
+
+// =============================
+// ADMISSION DASHBOARD & APPLICANTS
+// =============================
+
+const applicantInclude = {
+  program: true,
+  documents: true,
+  processedBy: {
+    select: {
+      id: true,
+      email: true,
+      roleId: true,
+    },
+  },
+};
+
+export const getAdmissionDashboard = async (_req, res) => {
+  try {
+    const [applicantStatus, enrollmentStatus, latestEnrollments, programTotals] =
+      await Promise.all([
+        prisma.applicant.groupBy({
+          by: ["status"],
+          _count: { status: true },
+        }),
+        prisma.enrollment.groupBy({
+          by: ["status"],
+          _count: { status: true },
+        }),
+        prisma.enrollment.findMany({
+          include: {
+            student: {
+              select: {
+                id: true,
+                studentNo: true,
+                programId: true,
+              },
+            },
+            term: true,
+          },
+          orderBy: { dateEnrolled: "desc" },
+          take: 10,
+        }),
+        prisma.program.findMany({
+          select: {
+            id: true,
+            code: true,
+            name: true,
+            _count: { students: true },
+          },
+        }),
+      ]);
+
+    const applicantSummary = applicantStatus.reduce(
+      (acc, row) => ({
+        ...acc,
+        [row.status]: row._count.status,
+      }),
+      { pending: 0, accepted: 0, rejected: 0 }
+    );
+
+    const enrollmentSummary = enrollmentStatus.reduce(
+      (acc, row) => ({
+        ...acc,
+        [row.status]: row._count.status,
+      }),
+      { pending: 0, confirmed: 0, cancelled: 0 }
+    );
+
+    const studentEnrollmentCounts = await prisma.enrollment.groupBy({
+      by: ["studentId"],
+      _count: { studentId: true },
+    });
+
+    const newStudents = studentEnrollmentCounts.filter(
+      (row) => row._count.studentId === 1
+    ).length;
+    const continuingStudents = Math.max(
+      0,
+      studentEnrollmentCounts.length - newStudents
+    );
+
+    const latest = latestEnrollments.map((record) => ({
+      id: record.id,
+      studentId: record.studentId,
+      studentNo: record.student?.studentNo,
+      term: record.term?.schoolYear,
+      semester: record.term?.semester,
+      status: record.status,
+      totalUnits: record.totalUnits,
+      dateEnrolled: record.dateEnrolled,
+    }));
+
+    const programSummary = programTotals.map((program) => ({
+      id: program.id,
+      code: program.code,
+      name: program.name,
+      students: program._count.students,
+    }));
+
+    return res.json({
+      success: true,
+      data: {
+        applicants: applicantSummary,
+        enrollments: enrollmentSummary,
+        students: {
+          new: newStudents,
+          continuing: continuingStudents,
+        },
+        latestEnrollments: latest,
+        programs: programSummary,
+      },
+    });
+  } catch (err) {
+    console.error("getAdmissionDashboard error:", err);
+    return res
+      .status(500)
+      .json({ success: false, message: "Server error", detail: err.message });
+  }
+};
+
+export const createApplicant = async (req, res) => {
+  try {
+    const { fullName, email, programId, notes, documents = [] } = req.body || {};
+
+    if (!fullName || !email || !programId) {
+      return res.status(400).json({
+        success: false,
+        message: "fullName, email and programId are required",
+      });
+    }
+
+    const applicant = await prisma.applicant.create({
+      data: {
+        fullName,
+        email,
+        programId: Number(programId),
+        notes,
+        processedById: req.user?.id ?? null,
+        documents: {
+          create: documents.map((doc) => ({
+            filename: doc.filename,
+            mimeType: doc.mimeType,
+            url: doc.url,
+          })),
+        },
+      },
+      include: applicantInclude,
+    });
+
+    return res.status(201).json({ success: true, data: applicant });
+  } catch (err) {
+    console.error("createApplicant error:", err);
+    return res
+      .status(500)
+      .json({ success: false, message: "Server error", detail: err.message });
+  }
+};
+
+export const listApplicants = async (req, res) => {
+  try {
+    const {
+      q,
+      status,
+      programId,
+      sort = "submittedAt:desc",
+      page = "1",
+      size = "20",
+    } = req.query;
+
+    const [sortField, sortDirection] = String(sort).split(":");
+    const orderBy = ["submittedAt", "fullName", "status"].includes(sortField)
+      ? { [sortField]: sortDirection === "asc" ? "asc" : "desc" }
+      : { submittedAt: "desc" };
+
+    const where = {
+      AND: [
+        q
+          ? {
+              OR: [
+                { fullName: { contains: String(q), mode: "insensitive" } },
+                { email: { contains: String(q), mode: "insensitive" } },
+              ],
+            }
+          : {},
+        status ? { status: String(status) } : {},
+        programId ? { programId: Number(programId) } : {},
+      ],
+    };
+
+    const pageNum = Math.max(1, parseInt(String(page), 10) || 1);
+    const pageSize = Math.max(1, Math.min(100, parseInt(String(size), 10) || 20));
+    const skip = (pageNum - 1) * pageSize;
+
+    const [total, rows] = await Promise.all([
+      prisma.applicant.count({ where }),
+      prisma.applicant.findMany({
+        where,
+        orderBy,
+        skip,
+        take: pageSize,
+        include: applicantInclude,
+      }),
+    ]);
+
+    return res.json({
+      success: true,
+      data: rows,
+      pagination: { total, page: pageNum, size: pageSize },
+    });
+  } catch (err) {
+    console.error("listApplicants error:", err);
+    return res
+      .status(500)
+      .json({ success: false, message: "Server error", detail: err.message });
+  }
+};
+
+export const getApplicant = async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const applicant = await prisma.applicant.findUnique({
+      where: { id },
+      include: applicantInclude,
+    });
+
+    if (!applicant) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Applicant not found" });
+    }
+
+    return res.json({ success: true, data: applicant });
+  } catch (err) {
+    console.error("getApplicant error:", err);
+    return res
+      .status(500)
+      .json({ success: false, message: "Server error", detail: err.message });
+  }
+};
+
+export const updateApplicant = async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const { fullName, email, programId, status, notes, documents } = req.body || {};
+
+    const data = {
+      fullName,
+      email,
+      programId: programId !== undefined ? Number(programId) : undefined,
+      status: status ? String(status) : undefined,
+      notes,
+      processedById: req.user?.id ?? undefined,
+    };
+
+    const result = await prisma.$transaction(async (trx) => {
+      const updated = await trx.applicant.update({
+        where: { id },
+        data,
+        include: applicantInclude,
+      });
+
+      if (Array.isArray(documents)) {
+        await trx.applicantDocument.deleteMany({ where: { applicantId: id } });
+        if (documents.length) {
+          await trx.applicantDocument.createMany({
+            data: documents.map((doc) => ({
+              applicantId: id,
+              filename: doc.filename,
+              mimeType: doc.mimeType,
+              url: doc.url,
+            })),
+          });
+        }
+
+        return trx.applicant.findUnique({
+          where: { id },
+          include: applicantInclude,
+        });
+      }
+
+      return updated;
+    });
+
+    return res.json({ success: true, data: result });
+  } catch (err) {
+    console.error("updateApplicant error:", err);
+    if (err.code === "P2025") {
+      return res
+        .status(404)
+        .json({ success: false, message: "Applicant not found" });
+    }
+    return res
+      .status(500)
+      .json({ success: false, message: "Server error", detail: err.message });
+  }
+};
+
+export const deleteApplicant = async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+
+    await prisma.$transaction(async (trx) => {
+      await trx.applicantDocument.deleteMany({ where: { applicantId: id } });
+      await trx.applicant.delete({ where: { id } });
+    });
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error("deleteApplicant error:", err);
+    if (err.code === "P2025") {
+      return res
+        .status(404)
+        .json({ success: false, message: "Applicant not found" });
+    }
+    return res
+      .status(500)
+      .json({ success: false, message: "Server error", detail: err.message });
+  }
+};
+
+export const setApplicantStatus = async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const { status, notes } = req.body || {};
+    const allowed = new Set(["pending", "accepted", "rejected"]);
+
+    if (!status || !allowed.has(String(status))) {
+      return res.status(400).json({
+        success: false,
+        message: "status must be pending, accepted or rejected",
+      });
+    }
+
+    const applicant = await prisma.applicant.update({
+      where: { id },
+      data: {
+        status: String(status),
+        notes,
+        processedById: req.user?.id ?? null,
+      },
+      include: applicantInclude,
+    });
+
+    return res.json({ success: true, data: applicant });
+  } catch (err) {
+    console.error("setApplicantStatus error:", err);
+    if (err.code === "P2025") {
+      return res
+        .status(404)
+        .json({ success: false, message: "Applicant not found" });
+    }
+    return res
+      .status(500)
+      .json({ success: false, message: "Server error", detail: err.message });
+  }
+};
+
+async function generateStudentNumber() {
+  const year = new Date().getFullYear();
+  const prefix = `${year}-`;
+  const existing = await prisma.student.findMany({
+    where: { studentNo: { startsWith: prefix } },
+    select: { studentNo: true },
+  });
+
+  const usedNumbers = new Set(
+    existing.map((item) => Number(item.studentNo.split("-")[1] || 0))
+  );
+
+  let counter = 1;
+  while (usedNumbers.has(counter)) counter += 1;
+
+  return `${prefix}${String(counter).padStart(5, "0")}`;
+}
+
+export const createStudentFromApplicant = async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const { yearLevel = 1, studentNo } = req.body || {};
+
+    const applicant = await prisma.applicant.findUnique({
+      where: { id },
+      include: applicantInclude,
+    });
+
+    if (!applicant) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Applicant not found" });
+    }
+
+    const studentRole = await prisma.role.findFirst({
+      where: { name: "student" },
+    });
+
+    if (!studentRole) {
+      return res
+        .status(500)
+        .json({ success: false, message: "Student role not configured" });
+    }
+
+    const existingUser = await prisma.user.findUnique({
+      where: { email: applicant.email },
+    });
+
+    if (existingUser) {
+      return res.status(409).json({
+        success: false,
+        message: "User with applicant email already exists",
+      });
+    }
+
+    const hashedPassword = await bcrypt.hash(DEFAULT_STUDENT_PASSWORD, 10);
+    const generatedStudentNo = studentNo || (await generateStudentNumber());
+
+    const result = await prisma.$transaction(async (trx) => {
+      const user = await trx.user.create({
+        data: {
+          email: applicant.email,
+          password: hashedPassword,
+          roleId: studentRole.id,
+          status: "active",
+        },
+      });
+
+      const student = await trx.student.create({
+        data: {
+          userId: user.id,
+          studentNo: generatedStudentNo,
+          programId: applicant.programId,
+          yearLevel: Number(yearLevel) || 1,
+          status: "regular",
+        },
+        include: { program: true },
+      });
+
+      await trx.applicant.update({
+        where: { id: applicant.id },
+        data: {
+          status: "accepted",
+          processedById: req.user?.id ?? null,
+        },
+      });
+
+      return { user, student };
+    });
+
+    return res.status(201).json({ success: true, data: result });
+  } catch (err) {
+    console.error("createStudentFromApplicant error:", err);
+    return res
+      .status(500)
+      .json({ success: false, message: "Server error", detail: err.message });
+  }
+};
+
+export const searchStudents = async (req, res) => {
+  try {
+    const { q = "", programId } = req.query;
+    const term = String(q).trim();
+    if (!term) {
+      return res.json({ success: true, data: [] });
+    }
+
+    const results = await prisma.student.findMany({
+      where: {
+        AND: [
+          programId ? { programId: Number(programId) } : {},
+          {
+            OR: [
+              { studentNo: { contains: term, mode: "insensitive" } },
+              {
+                user: {
+                  email: { contains: term, mode: "insensitive" },
+                },
+              },
+            ],
+          },
+        ],
+      },
+      include: {
+        user: true,
+        program: true,
+      },
+      take: 20,
+    });
+
+    const payload = results.map((student) => ({
+      id: student.id,
+      studentNo: student.studentNo,
+      email: student.user?.email,
+      program: student.program?.name,
+      yearLevel: student.yearLevel,
+      status: student.status,
+    }));
+
+    return res.json({ success: true, data: payload });
+  } catch (err) {
+    console.error("searchStudents error:", err);
+    return res
+      .status(500)
+      .json({ success: false, message: "Server error", detail: err.message });
+  }
+};
 
 // =============================
 // ENROLLMENT ADVISING
@@ -347,12 +856,43 @@ export const submitEnrollment = async (req, res) => {
         });
       }
 
+      const existingUser = await prisma.user.findUnique({
+        where: { email: newStudent.email }
+      });
+
+      if (existingUser) {
+        return res.status(409).json({
+          success: false,
+          message: "User with provided email already exists"
+        });
+      }
+
+      const studentRole = await prisma.role.findFirst({
+        where: { name: "student" }
+      });
+
+      if (!studentRole) {
+        return res.status(500).json({
+          success: false,
+          message: "Student role not configured"
+        });
+      }
+
+      const hashedPassword = await bcrypt.hash(
+        newStudent.password || DEFAULT_STUDENT_PASSWORD,
+        10
+      );
+
+      const generatedStudentNo =
+        newStudent.studentNo || (await generateStudentNumber());
+
       // Create user account
       const user = await prisma.user.create({
         data: {
           email: newStudent.email,
-          password: "changeme123", // TODO: Hash this properly
-          role: { connect: { name: "student" } }
+          password: hashedPassword,
+          roleId: studentRole.id,
+          status: "active"
         }
       });
 
@@ -362,7 +902,7 @@ export const submitEnrollment = async (req, res) => {
           userId: user.id,
           programId: Number(newStudent.programId),
           yearLevel: Number(newStudent.yearLevel) || 1,
-          studentNo: `S-${Date.now()}`, // TODO: Implement proper ID generation
+          studentNo: generatedStudentNo,
           status: "regular"
         }
       });
@@ -478,6 +1018,9 @@ export const submitEnrollment = async (req, res) => {
     });
   }
 };
+
+export const createStudentEnrollment = async (req, res) =>
+  submitEnrollment(req, res);
 
 // =============================
 // UTILITY FUNCTIONS
