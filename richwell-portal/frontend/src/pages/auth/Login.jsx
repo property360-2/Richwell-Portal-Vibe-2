@@ -1,55 +1,95 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useAuthStore } from "../../store/useAuthStore";
-import AuthLayout from "../../layouts/AuthLayout";
+import AuthLayout from "../../layouts/AuthLayout.jsx";
+import { useAuth } from "../../context/AuthContext.jsx";
+import { useToast } from "../../components/ToastProvider.jsx";
+
+const ROLES = [
+  { value: "student", label: "Student" },
+  { value: "professor", label: "Professor" },
+  { value: "registrar", label: "Registrar" },
+  { value: "admission", label: "Admission" },
+  { value: "dean", label: "Dean" },
+  { value: "admin", label: "Admin" },
+];
 
 export default function Login() {
-  const { login, loading, error } = useAuthStore();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const navigate = useNavigate();
+  const toast = useToast();
+  const { login, loading, error, clearError } = useAuth();
+  const [email, setEmail] = useState("student@richwell.edu");
+  const [password, setPassword] = useState("password123");
+  const [role, setRole] = useState("student");
 
-  const handleLogin = async (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    await login(email, password);
-    const role = useAuthStore.getState().user?.role;
-    if (role) navigate(`/${role}/dashboard`);
+    try {
+      const user = await login(email, password, role);
+      toast.success(`Welcome back, ${user.name}!`);
+      navigate(`/${user.role}/dashboard`);
+    } catch {
+      toast.error("Invalid login credentials for selected role.");
+    }
   };
 
   return (
     <AuthLayout>
-      <form onSubmit={handleLogin} className="space-y-4">
+      <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="text-gray-400 text-sm">Email</label>
+          <label className="text-sm text-slate-300">Email address</label>
           <input
             type="email"
-            className="w-full bg-gray-800 p-3 rounded-lg text-gray-200 outline-none mt-1"
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            onChange={(event) => {
+              setEmail(event.target.value);
+              if (error) clearError();
+            }}
+            className="w-full bg-slate-900 border border-slate-800 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 rounded-lg px-3 py-2 text-slate-100 mt-1"
             required
+            autoComplete="email"
           />
         </div>
 
         <div>
-          <label className="text-gray-400 text-sm">Password</label>
+          <label className="text-sm text-slate-300">Password</label>
           <input
             type="password"
-            className="w-full bg-gray-800 p-3 rounded-lg text-gray-200 outline-none mt-1"
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            onChange={(event) => {
+              setPassword(event.target.value);
+              if (error) clearError();
+            }}
+            className="w-full bg-slate-900 border border-slate-800 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 rounded-lg px-3 py-2 text-slate-100 mt-1"
             required
+            autoComplete="current-password"
           />
+        </div>
+
+        <div>
+          <label className="text-sm text-slate-300">Role</label>
+          <select
+            value={role}
+            onChange={(event) => setRole(event.target.value)}
+            className="w-full bg-slate-900 border border-slate-800 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 rounded-lg px-3 py-2 text-slate-100 mt-1"
+          >
+            {ROLES.map((item) => (
+              <option key={item.value} value={item.value}>
+                {item.label}
+              </option>
+            ))}
+          </select>
         </div>
 
         {error && (
-          <p className="text-red-500 text-sm text-center mt-2">{error}</p>
+          <p className="text-red-400 text-sm text-center">{error}</p>
         )}
 
         <button
+          type="submit"
           disabled={loading}
-          className="w-full bg-purple-600 hover:bg-purple-700 py-3 rounded-lg text-white font-medium transition"
+          className="w-full bg-gradient-to-r from-purple-600 via-purple-500 to-yellow-400 hover:from-purple-500 hover:via-purple-400 hover:to-yellow-300 text-slate-950 font-semibold rounded-lg py-3 transition"
         >
-          {loading ? "Signing in..." : "Login"}
+          {loading ? "Signing in…" : "Sign in"}
         </button>
       </form>
     </AuthLayout>

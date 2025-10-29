@@ -1,118 +1,120 @@
-import { useEffect, useState } from "react";
-import SidebarLayout from "../../layouts/SidebarLayout";
-import api from "../../services/api";
-import Modal from "../../components/Modal";
-import ErrorAlert from "../../components/ErrorAlert";
-import { useToast } from "../../components/ToastProvider";
+import { useState } from "react";
+import { useAuth } from "../../context/AuthContext.jsx";
+import { Plus, Pencil, Trash2 } from "lucide-react";
 
-export default function Curriculum() {
-  const toast = useToast();
-  const [rows, setRows] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editing, setEditing] = useState(null);
-  const [form, setForm] = useState({ startYear: "", endYear: "" });
-  const [page, setPage] = useState(1);
-  const [size] = useState(10);
-  const [total, setTotal] = useState(0);
+const blankCurriculum = {
+  name: "",
+  programId: "",
+  version: "",
+  effectiveTerm: "",
+  totalUnits: 0,
+};
 
-  const openEdit = (row) => {
-    setEditing(row);
-    setForm({ startYear: row.startYear, endYear: row.endYear });
-    setIsModalOpen(true);
-  };
+export default function AdminCurriculum() {
+  const { portalData, updatePortalData } = useAuth();
+  const [isModalOpen, setModalOpen] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [form, setForm] = useState(blankCurriculum);
 
-  const closeModal = () => setIsModalOpen(false);
-  const onChange = (e) => setForm((f) => ({ ...f, [e.target.name]: e.target.value }));
-
-  const onSave = (e) => {
-    e.preventDefault();
-    const payload = { startYear: Number(form.startYear), endYear: Number(form.endYear) };
-    api
-      .put(`/admin/curriculum/${editing.id}`, payload)
-      .then((res) => {
-        const updated = res.data?.data;
-        setRows((prev) => prev.map((r) => (r.id === editing.id ? updated : r)));
-        setIsModalOpen(false);
-        setError(null);
-        toast.success("Curriculum updated");
-      })
-      .catch((err) => {
-        const msg = err.response?.data?.message || "Save failed";
-        setError(msg);
-        toast.error(msg);
+  const openModal = (curriculum) => {
+    if (curriculum) {
+      setEditingId(curriculum.id);
+      setForm({
+        name: curriculum.name,
+        programId: curriculum.programId,
+        version: curriculum.version,
+        effectiveTerm: curriculum.effectiveTerm,
+        totalUnits: curriculum.totalUnits,
       });
+    } else {
+      setEditingId(null);
+      setForm({ ...blankCurriculum, programId: portalData.programs[0]?.id ?? "" });
+    }
+    setModalOpen(true);
   };
 
-  // No manual delete/add in this UI per spec
-
-  const fetchData = () => {
-    setLoading(true);
-    api
-      .get("/admin/curriculum", { params: { page, size } })
-      .then((res) => {
-        setRows(res.data?.data || []);
-        setTotal(res.data?.pagination?.total || 0);
-        setError(null);
-      })
-      .catch((err) => setError(err.response?.data?.message || "Failed to load curriculum"))
-      .finally(() => setLoading(false));
+  const closeModal = () => {
+    setModalOpen(false);
+    setEditingId(null);
+    setForm(blankCurriculum);
   };
 
-  useEffect(() => {
-    fetchData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, size]);
+  const saveCurriculum = () => {
+    if (!form.name) return;
+    updatePortalData((previous) => {
+      const next = JSON.parse(JSON.stringify(previous));
+      if (editingId) {
+        next.curriculums = next.curriculums.map((curriculum) =>
+          curriculum.id === editingId ? { ...curriculum, ...form } : curriculum
+        );
+      } else {
+        next.curriculums.push({ id: `curr-${Date.now()}`, ...form });
+      }
+      return next;
+    });
+    closeModal();
+  };
+
+  const deleteCurriculum = (id) => {
+    updatePortalData((previous) => {
+      const next = JSON.parse(JSON.stringify(previous));
+      next.curriculums = next.curriculums.filter((curriculum) => curriculum.id !== id);
+      return next;
+    });
+  };
+
+  const programLookup = Object.fromEntries(portalData.programs.map((program) => [program.id, program.name]));
 
   return (
-    <SidebarLayout>
-      <div className="flex items-center justify-between mb-4">
-        <h1 className="text-2xl font-semibold">Curriculum</h1>
-        <div />
-      </div>
+    <div className="space-y-6">
+      <header className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="text-xs uppercase tracking-[0.3em] text-purple-400">Curriculum library</p>
+          <h1 className="text-2xl font-semibold text-yellow-400">Curate curricular templates</h1>
+          <p className="text-sm text-slate-400">Maintain revisions and effective terms for each academic program.</p>
+        </div>
+        <button
+          onClick={() => openModal(null)}
+          className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-purple-600 via-purple-500 to-yellow-400 px-4 py-2 text-sm font-semibold text-slate-950 hover:from-purple-500 hover:via-purple-400 hover:to-yellow-300"
+        >
+          <Plus size={16} /> New curriculum
+        </button>
+      </header>
 
-      <ErrorAlert message={error} />
-
-      <div className="bg-gray-800 border border-gray-700 rounded-xl overflow-hidden">
+      <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
         <div className="overflow-x-auto">
-          <table className="min-w-full text-sm">
-            <thead className="bg-gray-900 text-gray-300">
+          <table className="w-full text-sm">
+            <thead className="text-slate-400 border-b border-slate-800">
               <tr>
-                <th className="text-left px-4 py-3">Program</th>
-                <th className="text-left px-4 py-3">Sector</th>
-                <th className="text-left px-4 py-3">Start Year</th>
-                <th className="text-left px-4 py-3">End Year</th>
-                <th className="text-left px-4 py-3">Status</th>
-                <th className="text-right px-4 py-3">Actions</th>
+                <th className="py-2 text-left">Curriculum</th>
+                <th className="py-2 text-left">Program</th>
+                <th className="py-2 text-left">Version</th>
+                <th className="py-2 text-left">Effective term</th>
+                <th className="py-2 text-left">Total units</th>
+                <th className="py-2 text-left">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {loading ? (
-                <tr>
-                  <td className="px-4 py-6 text-center text-gray-400" colSpan={6}>Loading...</td>
-                </tr>
-              ) : rows.length === 0 ? (
-                <tr>
-                  <td className="px-4 py-6 text-center text-gray-400" colSpan={6}>No curriculum found</td>
-                </tr>
-              ) : rows.map((r, idx) => (
-                <tr
-                  key={r.id}
-                  className={`${idx % 2 === 0 ? "bg-gray-800" : "bg-gray-900"} hover:bg-gray-700 border-t border-gray-700`}
-                >
-                  <td className="px-4 py-3 font-medium">{r.program?.name || "-"}</td>
-                  <td className="px-4 py-3">{r.program?.sector?.name || "-"}</td>
-                  <td className="px-4 py-3">{r.startYear}</td>
-                  <td className="px-4 py-3">{r.endYear}</td>
-                  <td className="px-4 py-3 capitalize">{r.status}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center justify-end gap-2">
+              {portalData.curriculums.map((curriculum) => (
+                <tr key={curriculum.id} className="border-b border-slate-900/40 last:border-0">
+                  <td className="py-3 text-purple-200 font-medium">{curriculum.name}</td>
+                  <td className="py-3 text-slate-300">{programLookup[curriculum.programId]}</td>
+                  <td className="py-3 text-slate-300">{curriculum.version}</td>
+                  <td className="py-3 text-slate-300">{curriculum.effectiveTerm}</td>
+                  <td className="py-3 text-slate-300">{curriculum.totalUnits}</td>
+                  <td className="py-3">
+                    <div className="flex gap-2">
                       <button
-                        onClick={() => openEdit(r)}
-                        className="px-3 py-1.5 rounded-md text-xs bg-blue-600 hover:bg-blue-700 text-white"
+                        onClick={() => openModal(curriculum)}
+                        className="inline-flex items-center gap-1 rounded-lg border border-slate-700 px-3 py-1 text-xs text-slate-200 hover:border-purple-500/40"
                       >
-                        Edit
+                        <Pencil size={14} /> Edit
+                      </button>
+                      <button
+                        onClick={() => deleteCurriculum(curriculum.id)}
+                        className="inline-flex items-center gap-1 rounded-lg border border-red-500/40 px-3 py-1 text-xs text-red-300 hover:bg-red-500/10"
+                      >
+                        <Trash2 size={14} /> Remove
                       </button>
                     </div>
                   </td>
@@ -121,71 +123,80 @@ export default function Curriculum() {
             </tbody>
           </table>
         </div>
-      </div>
+      </section>
 
-      <Modal open={isModalOpen} onClose={closeModal} title={editing ? `Edit Curriculum — ${editing?.program?.name}` : "Edit Curriculum"}>
-        <form onSubmit={onSave} className="space-y-3">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm text-gray-300">Start Year</label>
-                  <input
-                    name="startYear"
-                    type="number"
-                    value={form.startYear}
-                    onChange={onChange}
-                    className="mt-1 w-full bg-gray-800 border border-gray-700 rounded-lg p-2.5 outline-none"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm text-gray-300">End Year</label>
-                  <input
-                    name="endYear"
-                    type="number"
-                    value={form.endYear}
-                    onChange={onChange}
-                    className="mt-1 w-full bg-gray-800 border border-gray-700 rounded-lg p-2.5 outline-none"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={closeModal}
-                  className="px-4 py-2 rounded-lg text-sm bg-gray-700 hover:bg-gray-600"
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 px-4">
+          <div className="w-full max-w-xl rounded-2xl border border-purple-500/40 bg-slate-950 p-6 shadow-2xl space-y-4">
+            <h2 className="text-lg font-semibold text-purple-200">
+              {editingId ? "Edit curriculum" : "Create curriculum"}
+            </h2>
+            <div className="grid gap-3 text-sm md:grid-cols-2">
+              <label className="block md:col-span-2">
+                <span className="text-slate-400">Curriculum name</span>
+                <input
+                  value={form.name}
+                  onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
+                  className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 focus:border-purple-500 focus:outline-none"
+                />
+              </label>
+              <label className="block">
+                <span className="text-slate-400">Program</span>
+                <select
+                  value={form.programId}
+                  onChange={(event) => setForm((prev) => ({ ...prev, programId: event.target.value }))}
+                  className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 focus:border-purple-500 focus:outline-none"
                 >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 rounded-lg text-sm bg-purple-600 hover:bg-purple-700 text-white"
-                >
-                  Save
-                </button>
-              </div>
-        </form>
-      </Modal>
-
-      {/* Pagination */}
-      <div className="flex items-center justify-between mt-4 text-sm text-gray-300">
-        <div>
-          Page {page} of {Math.max(1, Math.ceil(total / size))} • {total} total
+                  {portalData.programs.map((program) => (
+                    <option key={program.id} value={program.id}>
+                      {program.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                <span className="text-slate-400">Version</span>
+                <input
+                  value={form.version}
+                  onChange={(event) => setForm((prev) => ({ ...prev, version: event.target.value }))}
+                  className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 focus:border-purple-500 focus:outline-none"
+                />
+              </label>
+              <label className="block">
+                <span className="text-slate-400">Effective term</span>
+                <input
+                  value={form.effectiveTerm}
+                  onChange={(event) => setForm((prev) => ({ ...prev, effectiveTerm: event.target.value }))}
+                  className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 focus:border-purple-500 focus:outline-none"
+                />
+              </label>
+              <label className="block">
+                <span className="text-slate-400">Total units</span>
+                <input
+                  type="number"
+                  value={form.totalUnits}
+                  onChange={(event) => setForm((prev) => ({ ...prev, totalUnits: Number(event.target.value) }))}
+                  className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 focus:border-purple-500 focus:outline-none"
+                />
+              </label>
+            </div>
+            <div className="flex justify-end gap-2 text-sm">
+              <button
+                onClick={closeModal}
+                className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-slate-200 hover:border-purple-500/40"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveCurriculum}
+                className="rounded-lg bg-gradient-to-r from-purple-600 via-purple-500 to-yellow-400 px-4 py-2 font-semibold text-slate-950 hover:from-purple-500 hover:via-purple-400 hover:to-yellow-300"
+              >
+                Save changes
+              </button>
+            </div>
+          </div>
         </div>
-        <div className="flex gap-2">
-          <button
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-            disabled={page <= 1}
-            className="px-3 py-1 rounded bg-gray-800 border border-gray-700 disabled:opacity-50"
-          >Prev</button>
-          <button
-            onClick={() => setPage((p) => p + 1)}
-            disabled={page >= Math.ceil(total / size)}
-            className="px-3 py-1 rounded bg-gray-800 border border-gray-700 disabled:opacity-50"
-          >Next</button>
-        </div>
-      </div>
-    </SidebarLayout>
+      )}
+    </div>
   );
 }
