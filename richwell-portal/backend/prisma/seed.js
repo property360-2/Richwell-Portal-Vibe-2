@@ -1,5 +1,12 @@
 import { PrismaClient } from '@prisma/client';
-const bcrypt = require('bcrypt');
+import bcrypt from 'bcryptjs';
+import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+// Ensure environment variables from prisma/.env are loaded regardless of CWD
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: path.join(__dirname, '.env') });
 
 const prisma = new PrismaClient();
 

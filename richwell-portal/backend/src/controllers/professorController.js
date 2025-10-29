@@ -1,11 +1,51 @@
 // src/controllers/professorController.js
 
+import prisma from "../prismaClient.js";
 import { calculateRepeatEligibleDate } from "./admissionController.js";
+
+// Get sections handled by the logged-in professor
+export const getMySections = async (req, res) => {
+  try {
+    const professor = await prisma.professor.findUnique({
+      where: { userId: req.user.id },
+      include: {
+        sections: {
+          include: {
+            subject: true,
+          },
+        },
+      },
+    });
+
+    if (!professor) {
+      return res.status(404).json({
+        success: false,
+        message: "Professor profile not found",
+      });
+    }
+
+    return res.json({ success: true, data: professor.sections });
+  } catch (err) {
+    console.error("getMySections error:", err);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
 
 export const encodeGrade = async (req, res) => {
   try {
     const { enrollmentSubjectId, gradeValue, remarks } = req.body;
-    const professorId = req.user.professor.id;
+    // Resolve professor by logged-in userId
+    const professor = await prisma.professor.findUnique({
+      where: { userId: req.user.id },
+    });
+
+    if (!professor) {
+      return res.status(404).json({
+        success: false,
+        message: "Professor profile not found",
+      });
+    }
+    const professorId = professor.id;
 
     // Get subject details to calculate repeat date
     const enrollmentSubject = await prisma.enrollmentSubject.findUnique({
