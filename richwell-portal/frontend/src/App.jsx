@@ -5,6 +5,7 @@ import ProfessorDashboard from "./pages/professor/Dashboard.jsx";
 import RegistrarDashboard from "./pages/registrar/Dashboard.jsx";
 import AdmissionDashboard from "./pages/admission/Dashboard.jsx";
 import AdmissionEnrollmentForm from "./pages/admission/EnrollmentForm.jsx";
+import EnrollmentPage from "./pages/admission/EnrollmentPage.jsx";
 import AdmissionApplicants from "./pages/admission/Applicants.jsx";
 import AdmissionAnalytics from "./pages/admission/AdmissionAnalytics.jsx";
 import AdmissionPrograms from "./pages/admission/Programs.jsx";
@@ -14,6 +15,8 @@ import AdminPrograms from "./pages/admin/Programs.jsx";
 import AdminCurriculum from "./pages/admin/Curriculum.jsx";
 import AdminSettings from "./pages/admin/Settings.jsx";
 import AdminAnalytics from "./pages/admin/Analytics.jsx";
+import AdminDepartments from "./pages/admin/Departments.jsx";
+import AdminSectors from "./pages/admin/Sectors.jsx";
 import { useAuth } from "./context/AuthContext.jsx";
 import SidebarLayout from "./layouts/SidebarLayout.jsx";
 
@@ -104,6 +107,16 @@ export default function App() {
           }
         />
         <Route
+          path="/admission/enrollment"
+          element={
+            <ProtectedRoute role="admission">
+              <SidebarLayout>
+                <EnrollmentPage />
+              </SidebarLayout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/admission/applicants"
           element={
             <ProtectedRoute role="admission">
@@ -171,6 +184,26 @@ export default function App() {
             <ProtectedRoute role="admin">
               <SidebarLayout>
                 <AdminCurriculum />
+              </SidebarLayout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/departments"
+          element={
+            <ProtectedRoute role="admin">
+              <SidebarLayout>
+                <AdminDepartments />
+              </SidebarLayout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/sectors"
+          element={
+            <ProtectedRoute role="admin">
+              <SidebarLayout>
+                <AdminSectors />
               </SidebarLayout>
             </ProtectedRoute>
           }

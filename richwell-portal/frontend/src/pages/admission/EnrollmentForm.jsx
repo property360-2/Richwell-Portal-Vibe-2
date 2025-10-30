@@ -87,7 +87,7 @@ export default function AdmissionEnrollmentForm() {
 
       if (mode === "new" && prereq.length > 0) {
         blocked = true;
-        reason = "Locked: Available after credential evaluation";
+        reason = "you should complete the prerequisite before enrolling to this subject";
       }
 
       const allSections = subject.sections ?? [];
@@ -445,12 +445,7 @@ export default function AdmissionEnrollmentForm() {
             })}
           </div>
 
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/40 p-4 text-xs text-slate-400 space-y-2">
-            <p className="font-semibold text-slate-200">Jun’s INC rule</p>
-            <p>
-              The system automatically blocks enrolment to ComProg2 when ComProg1 has an INC. Try selecting ComProg2 for Jun to see the tooltip message “Locked: INC in ComProg1”.
-            </p>
-          </div>
+
         </div>
       </section>
     </div>

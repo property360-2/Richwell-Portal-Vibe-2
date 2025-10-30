@@ -1,30 +1,33 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Pie, PieChart, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { useAuth } from "../../context/AuthContext.jsx";
+import { getAdmissionDashboard } from "../../api/admission.js";
 
 const COLORS = ["#F9D74C", "#9575CD", "#6A1B9A"];
 
 export default function AdmissionAnalytics() {
-  const { portalData } = useAuth();
+  const { token } = useAuth();
+  const [summary, setSummary] = useState({ new: 0, continuing: 0 });
 
-  const summary = useMemo(() => {
-    const total = portalData.enrollmentLogs.length || 1;
-    const newCount = portalData.enrollmentLogs.filter((log) => log.mode === "new").length;
-    const continuingCount = portalData.enrollmentLogs.filter((log) => log.mode === "existing").length;
-    return {
-      total,
-      newCount,
-      continuingCount,
-      newPercent: Math.round((newCount / total) * 100),
-      continuingPercent: Math.round((continuingCount / total) * 100),
-    };
-  }, [portalData.enrollmentLogs]);
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      if (!token) return;
+      try {
+        const res = await getAdmissionDashboard(token);
+        const s = res?.data?.students || { new: 0, continuing: 0 };
+        if (!cancelled) setSummary({ new: s.new || 0, continuing: s.continuing || 0 });
+      } catch {}
+    }
+    load();
+    return () => { cancelled = true; };
+  }, [token]);
 
-  const pieData = [
-    { name: "New", value: summary.newCount },
-    { name: "Continuing", value: summary.continuingCount },
-    { name: "Slots remaining", value: Math.max(1, 50 - summary.total) },
-  ];
+  const pieData = useMemo(() => [
+    { name: "New", value: summary.new },
+    { name: "Continuing", value: summary.continuing },
+    { name: "Remaining", value: Math.max(1, 50 - (summary.new + summary.continuing)) },
+  ], [summary]);
 
   return (
     <div className="space-y-6">
@@ -37,19 +40,19 @@ export default function AdmissionAnalytics() {
       <section className="grid gap-4 lg:grid-cols-[360px,1fr]">
         <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
           <h2 className="text-lg font-semibold text-purple-300 mb-3">Composition snapshot</h2>
-          <p className="text-sm text-slate-400">{summary.total} enrolments recorded in this local session.</p>
+          <p className="text-sm text-slate-400">{summary.new + summary.continuing} enrolments recorded this term.</p>
           <dl className="mt-4 space-y-2 text-sm text-slate-300">
             <div className="flex items-center justify-between">
-              <dt>New applicants</dt>
-              <dd className="text-yellow-300">{summary.newCount} ({summary.newPercent}%)</dd>
+              <dt>New students</dt>
+              <dd className="text-yellow-300">{summary.new}</dd>
             </div>
             <div className="flex items-center justify-between">
               <dt>Continuing students</dt>
-              <dd className="text-purple-300">{summary.continuingCount} ({summary.continuingPercent}%)</dd>
+              <dd className="text-purple-300">{summary.continuing}</dd>
             </div>
             <div className="flex items-center justify-between">
               <dt>Remaining target (50)</dt>
-              <dd className="text-slate-300">{Math.max(0, 50 - summary.total)} slots</dd>
+              <dd className="text-slate-300">{Math.max(0, 50 - (summary.new + summary.continuing))} slots</dd>
             </div>
           </dl>
         </div>
@@ -64,15 +67,7 @@ export default function AdmissionAnalytics() {
                     <Cell key={entry.name} fill={COLORS[index % COLORS.length]} />
                   ))}
                 </Pie>
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: "#0f1729",
-                    borderRadius: "0.75rem",
-                    border: "1px solid #312e81",
-                    color: "#e2e8f0",
-                    fontSize: "0.75rem",
-                  }}
-                />
+                <Tooltip contentStyle={{ backgroundColor: "#0f1729", borderRadius: "0.75rem", border: "1px solid #312e81", color: "#e2e8f0", fontSize: "0.75rem" }} />
               </PieChart>
             </ResponsiveContainer>
           </div>
@@ -81,3 +76,4 @@ export default function AdmissionAnalytics() {
     </div>
   );
 }
+

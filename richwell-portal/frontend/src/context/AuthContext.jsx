@@ -36,26 +36,29 @@ export function AuthProvider({ children }) {
     localStorage.setItem(SESSION_KEY, JSON.stringify(session));
   }, [session]);
 
-  const login = useCallback(async (email, password, role) => {
+  const login = useCallback(async (email, password) => {
     setLoading(true);
     setError(null);
-    await new Promise((resolve) => setTimeout(resolve, 300));
-    const user = portalData.users.find(
-      (u) =>
-        u.email.toLowerCase() === email.toLowerCase() &&
-        u.password === password &&
-        u.role === role
-    );
-    if (!user) {
-      setError("Invalid credentials or role");
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const msg = data?.message || "Invalid credentials";
+        setError(msg);
+        throw new Error(msg);
+      }
+      const { user, token } = data || {};
+      if (!user || !token) throw new Error("Invalid server response");
+      setSession({ user, token });
+      return user;
+    } finally {
       setLoading(false);
-      throw new Error("Invalid credentials");
     }
-    const token = `${user.id}-${Date.now()}`;
-    setSession({ user, token });
-    setLoading(false);
-    return user;
-  }, [portalData.users]);
+  }, []);
 
   const logout = useCallback(() => {
     setSession({ user: null, token: null });

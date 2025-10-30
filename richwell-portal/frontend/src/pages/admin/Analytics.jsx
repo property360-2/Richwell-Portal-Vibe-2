@@ -1,11 +1,31 @@
+import { useEffect, useState } from "react";
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, BarChart, Bar, PieChart, Pie, Cell } from "recharts";
 import { useAuth } from "../../context/AuthContext.jsx";
+import { getAdminAnalytics } from "../../api/admin.js";
 
 const COLORS = ["#F9D74C", "#9575CD", "#6A1B9A", "#4C1D95"];
 
 export default function AdminAnalytics() {
-  const { portalData } = useAuth();
-  const { enrollmentTrends, gradeDistribution, programMix } = portalData.analytics;
+  const { token } = useAuth();
+  const [trend, setTrend] = useState([]);
+  const [perProgram, setPerProgram] = useState([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      if (!token) return;
+      try {
+        const res = await getAdminAnalytics(token);
+        const data = res?.data || {};
+        if (!cancelled) {
+          setTrend(data.trend || []);
+          setPerProgram(data.perProgram || []);
+        }
+      } catch {}
+    }
+    load();
+    return () => { cancelled = true; };
+  }, [token]);
 
   return (
     <div className="space-y-6">
@@ -20,23 +40,22 @@ export default function AdminAnalytics() {
           <h2 className="text-lg font-semibold text-purple-300 mb-4">Enrollment trend</h2>
           <div className="h-64">
             <ResponsiveContainer>
-              <LineChart data={enrollmentTrends}>
-                <XAxis dataKey="term" stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} />
+              <LineChart data={trend}>
+                <XAxis dataKey="month" stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} />
                 <YAxis stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} />
                 <Tooltip contentStyle={tooltipStyle} />
-                <Line type="monotone" dataKey="new" stroke="#F9D74C" strokeWidth={2} dot={false} />
-                <Line type="monotone" dataKey="continuing" stroke="#9575CD" strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="count" stroke="#F9D74C" strokeWidth={2} dot={false} />
               </LineChart>
             </ResponsiveContainer>
           </div>
         </article>
 
         <article className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
-          <h2 className="text-lg font-semibold text-purple-300 mb-4">Grade distribution</h2>
+          <h2 className="text-lg font-semibold text-purple-300 mb-4">Applicants per program</h2>
           <div className="h-64">
             <ResponsiveContainer>
-              <BarChart data={gradeDistribution}>
-                <XAxis dataKey="range" stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} />
+              <BarChart data={perProgram}>
+                <XAxis dataKey="name" stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} />
                 <YAxis stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} />
                 <Tooltip contentStyle={tooltipStyle} />
                 <Bar dataKey="count" radius={[10, 10, 0, 0]} fill="#6A1B9A" />
@@ -46,21 +65,7 @@ export default function AdminAnalytics() {
         </article>
       </section>
 
-      <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
-        <h2 className="text-lg font-semibold text-purple-300 mb-4">Program mix</h2>
-        <div className="h-72">
-          <ResponsiveContainer>
-            <PieChart>
-              <Pie data={programMix} dataKey="students" nameKey="name" outerRadius={120} label>
-                {programMix.map((entry, index) => (
-                  <Cell key={entry.name} fill={COLORS[index % COLORS.length]} />
-                ))}
-              </Pie>
-              <Tooltip contentStyle={tooltipStyle} />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
-      </section>
+      {/* Third chart omitted for backend alignment */}
     </div>
   );
 }

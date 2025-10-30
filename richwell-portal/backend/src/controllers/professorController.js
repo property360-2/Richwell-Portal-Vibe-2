@@ -31,6 +31,48 @@ export const getMySections = async (req, res) => {
   }
 };
 
+// Get roster (students) for a specific section handled by logged-in professor
+export const getSectionRoster = async (req, res) => {
+  try {
+    const sectionId = Number(req.params.id);
+    const professor = await prisma.professor.findUnique({ where: { userId: req.user.id } });
+    if (!professor) {
+      return res.status(404).json({ success: false, message: "Professor profile not found" });
+    }
+
+    const section = await prisma.section.findUnique({ where: { id: sectionId } });
+    if (!section || section.professorId !== professor.id) {
+      return res.status(403).json({ success: false, message: "Not allowed for this section" });
+    }
+
+    const roster = await prisma.enrollmentSubject.findMany({
+      where: { sectionId },
+      include: {
+        subject: true,
+        enrollment: {
+          include: { student: { include: { user: true } } },
+        },
+        grades: { orderBy: { dateEncoded: 'desc' }, take: 1 },
+      },
+      orderBy: { id: 'asc' },
+    });
+
+    const data = roster.map((row) => ({
+      enrollmentSubjectId: row.id,
+      studentId: row.enrollment.student.id,
+      studentNo: row.enrollment.student.studentNo,
+      studentEmail: row.enrollment.student.user?.email,
+      subjectCode: row.subject.code,
+      subjectName: row.subject.name,
+      latestGrade: row.grades?.[0]?.gradeValue || null,
+    }));
+
+    return res.json({ success: true, data });
+  } catch (err) {
+    console.error("getSectionRoster error:", err);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
 export const encodeGrade = async (req, res) => {
   try {
     const { enrollmentSubjectId, gradeValue, remarks } = req.body;

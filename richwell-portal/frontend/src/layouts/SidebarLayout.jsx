@@ -14,7 +14,7 @@ const linkConfig = {
   ],
   admission: [
     { to: "/admission/dashboard", label: "Dashboard", icon: <Home size={18} /> },
-    { to: "/admission/enroll", label: "Enrollment", icon: <FileText size={18} /> },
+    { to: "/admission/enrollment", label: "Enrollment", icon: <FileText size={18} /> },
     { to: "/admission/programs", label: "Programs", icon: <FileText size={18} /> },
     { to: "/admission/analytics", label: "Analytics", icon: <BarChart2 size={18} /> },
   ],
@@ -25,6 +25,8 @@ const linkConfig = {
     { to: "/admin/dashboard", label: "Dashboard", icon: <Home size={18} /> },
     { to: "/admin/programs", label: "Programs", icon: <FileText size={18} /> },
     { to: "/admin/curriculum", label: "Curriculum", icon: <FileText size={18} /> },
+    { to: "/admin/departments", label: "Departments", icon: <Users size={18} /> },
+    { to: "/admin/sectors", label: "Sectors", icon: <Users size={18} /> },
     { to: "/admin/settings", label: "Settings", icon: <Cog size={18} /> },
     { to: "/admin/analytics", label: "Analytics", icon: <BarChart2 size={18} /> },
   ],

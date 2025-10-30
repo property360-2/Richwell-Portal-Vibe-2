@@ -25,6 +25,9 @@ import registrarRoutes from "./routes/registrarRoutes.js";
 import admissionRoutes from "./routes/admissionRoutes.js";
 import deanRoutes from "./routes/deanRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
+import enrollmentRoutes from "./routes/enrollmentRoutes.js";
+import studentsRoutes from "./routes/studentsRoutes.js";
+import path from "path";
 
 app.use("/api/student", studentRoutes);
 app.use("/api/professor", professorRoutes);
@@ -32,6 +35,14 @@ app.use("/api/registrar", registrarRoutes);
 app.use("/api/admission", admissionRoutes);
 app.use("/api/dean", deanRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/enrollment", enrollmentRoutes);
+app.use("/api/students", studentsRoutes);
+
+// Serve uploads (TOR files)
+app.use("/uploads", (req, res, next) => {
+  const p = path.join(process.cwd(), "uploads");
+  express.static(p)(req, res, next);
+});
 
 // ✅ Step 4: Test routes
 app.get("/", (req, res) => {

@@ -1,7 +1,23 @@
+import { useEffect, useState } from "react";
 import { useAuth } from "../../context/AuthContext.jsx";
+import { listPrograms } from "../../api/admin.js";
 
 export default function AdmissionPrograms() {
-  const { portalData } = useAuth();
+  const { token } = useAuth();
+  const [rows, setRows] = useState([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      if (!token) return;
+      try {
+        const res = await listPrograms(token);
+        if (!cancelled) setRows(Array.isArray(res?.data) ? res.data : []);
+      } catch {}
+    }
+    load();
+    return () => { cancelled = true; };
+  }, [token]);
 
   return (
     <div className="space-y-6">
@@ -11,27 +27,38 @@ export default function AdmissionPrograms() {
         <p className="text-sm text-slate-400">Use this list to guide applicants to programs with healthy capacity.</p>
       </header>
 
-      <section className="grid gap-4 md:grid-cols-2">
-        {portalData.programs.map((program) => (
-          <article
-            key={program.id}
-            className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5"
-          >
-            <h2 className="text-lg font-semibold text-purple-300">{program.name}</h2>
-            <p className="text-sm text-slate-400">{program.students} active students · {program.growth}% YoY growth</p>
-            <div className="mt-4 grid grid-cols-2 gap-3 text-sm text-slate-300">
-              <div className="rounded-xl border border-purple-500/20 bg-purple-500/5 px-4 py-3">
-                <p className="text-xs uppercase tracking-wide text-slate-400">Popular subjects</p>
-                <p className="mt-1 text-purple-200">ComProg1, Discrete Math, Capstone</p>
-              </div>
-              <div className="rounded-xl border border-purple-500/20 bg-purple-500/5 px-4 py-3">
-                <p className="text-xs uppercase tracking-wide text-slate-400">Ideal prospect</p>
-                <p className="mt-1 text-purple-200">STEM graduates who enjoy coding & analytics</p>
-              </div>
-            </div>
-          </article>
-        ))}
+      <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="text-slate-400 border-b border-slate-800">
+              <tr>
+                <th className="py-2 text-left">Code</th>
+                <th className="py-2 text-left">Program</th>
+                <th className="py-2 text-left">Department</th>
+                <th className="py-2 text-left">Sector</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((p) => (
+                <tr key={p.id} className="border-b border-slate-900/40 last:border-0">
+                  <td className="py-3 text-slate-300">{p.code}</td>
+                  <td className="py-3 text-purple-200 font-medium">{p.name}</td>
+                  <td className="py-3 text-slate-300">{p.department?.name || "—"}</td>
+                  <td className="py-3 text-slate-300">{p.sector?.name || "—"}</td>
+                </tr>
+              ))}
+              {rows.length === 0 && (
+                <tr>
+                  <td colSpan={4} className="py-4 text-center text-slate-500 text-sm">
+                    No programs found.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </section>
     </div>
   );
 }
+

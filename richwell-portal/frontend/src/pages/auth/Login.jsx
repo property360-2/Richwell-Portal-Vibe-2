@@ -4,31 +4,23 @@ import AuthLayout from "../../layouts/AuthLayout.jsx";
 import { useAuth } from "../../context/AuthContext.jsx";
 import { useToast } from "../../components/ToastProvider.jsx";
 
-const ROLES = [
-  { value: "student", label: "Student" },
-  { value: "professor", label: "Professor" },
-  { value: "registrar", label: "Registrar" },
-  { value: "admission", label: "Admission" },
-  { value: "dean", label: "Dean" },
-  { value: "admin", label: "Admin" },
-];
+// Roles are inferred from backend; no local selection.
 
 export default function Login() {
   const navigate = useNavigate();
   const toast = useToast();
   const { login, loading, error, clearError } = useAuth();
-  const [email, setEmail] = useState("student@richwell.edu");
+  const [email, setEmail] = useState("admission@richwell.edu");
   const [password, setPassword] = useState("password123");
-  const [role, setRole] = useState("student");
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      const user = await login(email, password, role);
-      toast.success(`Welcome back, ${user.name}!`);
+      const user = await login(email, password);
+      toast.success(`Welcome back, ${user.email}!`);
       navigate(`/${user.role}/dashboard`);
     } catch {
-      toast.error("Invalid login credentials for selected role.");
+      toast.error("Invalid login credentials.");
     }
   };
 
@@ -65,20 +57,7 @@ export default function Login() {
           />
         </div>
 
-        <div>
-          <label className="text-sm text-slate-300">Role</label>
-          <select
-            value={role}
-            onChange={(event) => setRole(event.target.value)}
-            className="w-full bg-slate-900 border border-slate-800 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 rounded-lg px-3 py-2 text-slate-100 mt-1"
-          >
-            {ROLES.map((item) => (
-              <option key={item.value} value={item.value}>
-                {item.label}
-              </option>
-            ))}
-          </select>
-        </div>
+        {/* Role is determined by backend; selection removed */}
 
         {error && (
           <p className="text-red-400 text-sm text-center">{error}</p>

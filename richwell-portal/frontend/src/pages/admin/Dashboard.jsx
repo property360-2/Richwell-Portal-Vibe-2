@@ -1,6 +1,7 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Users, Layers, FileText, Building2 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext.jsx";
+import { getAdminDashboard } from "../../api/admin.js";
 
 const cards = [
   {
@@ -30,16 +31,24 @@ const cards = [
 ];
 
 export default function AdminDashboard() {
-  const { portalData } = useAuth();
-  const stats = useMemo(
-    () => ({
-      users: portalData.users.length,
-      programs: portalData.programs.length,
-      curriculums: portalData.curriculums.length,
-      terms: portalData.terms.length,
-    }),
-    [portalData]
-  );
+  const { token } = useAuth();
+  const [stats, setStats] = useState({ users: 0, programs: 0, curriculums: 0, terms: 0 });
+
+  useEffect(() => {
+    let cancelled = false;
+    async function fetchData() {
+      if (!token) return;
+      try {
+        const res = await getAdminDashboard(token);
+        const d = res?.data || {};
+        if (!cancelled) setStats({ users: d.users || 0, programs: d.programs || 0, curriculums: d.curriculums || 0, terms: d.departments || 0 });
+      } catch {
+        // ignore
+      }
+    }
+    fetchData();
+    return () => { cancelled = true; };
+  }, [token]);
 
   return (
     <div className="space-y-6">

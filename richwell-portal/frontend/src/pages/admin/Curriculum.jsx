@@ -1,34 +1,40 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "../../context/AuthContext.jsx";
 import { Plus, Pencil, Trash2 } from "lucide-react";
+import { getCurriculum, listPrograms, createCurriculum, updateCurriculum, deleteCurriculum } from "../../api/admin.js";
 
-const blankCurriculum = {
-  name: "",
-  programId: "",
-  version: "",
-  effectiveTerm: "",
-  totalUnits: 0,
-};
+const emptyForm = { programId: "", startYear: "", endYear: "", status: "active" };
 
 export default function AdminCurriculum() {
-  const { portalData, updatePortalData } = useAuth();
+  const { token } = useAuth();
+  const [rows, setRows] = useState([]);
+  const [programs, setPrograms] = useState([]);
   const [isModalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
-  const [form, setForm] = useState(blankCurriculum);
+  const [form, setForm] = useState(emptyForm);
 
-  const openModal = (curriculum) => {
-    if (curriculum) {
-      setEditingId(curriculum.id);
-      setForm({
-        name: curriculum.name,
-        programId: curriculum.programId,
-        version: curriculum.version,
-        effectiveTerm: curriculum.effectiveTerm,
-        totalUnits: curriculum.totalUnits,
-      });
+  async function refresh() {
+    if (!token) return;
+    const [c, p] = await Promise.all([getCurriculum(token), listPrograms(token)]);
+    setRows(Array.isArray(c?.data) ? c.data : []);
+    setPrograms(Array.isArray(p?.data) ? p.data : []);
+  }
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try { if (!cancelled) await refresh(); } catch {}
+    })();
+    return () => { cancelled = true; };
+  }, [token]);
+
+  const openModal = (row) => {
+    if (row) {
+      setEditingId(row.id);
+      setForm({ programId: row.programId, startYear: row.startYear, endYear: row.endYear, status: row.status });
     } else {
       setEditingId(null);
-      setForm({ ...blankCurriculum, programId: portalData.programs[0]?.id ?? "" });
+      setForm({ ...emptyForm, programId: programs[0]?.id || "" });
     }
     setModalOpen(true);
   };
@@ -36,47 +42,18 @@ export default function AdminCurriculum() {
   const closeModal = () => {
     setModalOpen(false);
     setEditingId(null);
-    setForm(blankCurriculum);
+    setForm(emptyForm);
   };
-
-  const saveCurriculum = () => {
-    if (!form.name) return;
-    updatePortalData((previous) => {
-      const next = JSON.parse(JSON.stringify(previous));
-      if (editingId) {
-        next.curriculums = next.curriculums.map((curriculum) =>
-          curriculum.id === editingId ? { ...curriculum, ...form } : curriculum
-        );
-      } else {
-        next.curriculums.push({ id: `curr-${Date.now()}`, ...form });
-      }
-      return next;
-    });
-    closeModal();
-  };
-
-  const deleteCurriculum = (id) => {
-    updatePortalData((previous) => {
-      const next = JSON.parse(JSON.stringify(previous));
-      next.curriculums = next.curriculums.filter((curriculum) => curriculum.id !== id);
-      return next;
-    });
-  };
-
-  const programLookup = Object.fromEntries(portalData.programs.map((program) => [program.id, program.name]));
 
   return (
     <div className="space-y-6">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-xs uppercase tracking-[0.3em] text-purple-400">Curriculum library</p>
-          <h1 className="text-2xl font-semibold text-yellow-400">Curate curricular templates</h1>
-          <p className="text-sm text-slate-400">Maintain revisions and effective terms for each academic program.</p>
+          <h1 className="text-2xl font-semibold text-yellow-400">Program curriculums</h1>
+          <p className="text-sm text-slate-400">Manage active/archived curriculums for each program.</p>
         </div>
-        <button
-          onClick={() => openModal(null)}
-          className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-purple-600 via-purple-500 to-yellow-400 px-4 py-2 text-sm font-semibold text-slate-950 hover:from-purple-500 hover:via-purple-400 hover:to-yellow-300"
-        >
+        <button onClick={() => openModal(null)} className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-purple-600 via-purple-500 to-yellow-400 px-4 py-2 text-sm font-semibold text-slate-950 hover:from-purple-500 hover:via-purple-400 hover:to-yellow-300">
           <Plus size={16} /> New curriculum
         </button>
       </header>
@@ -86,40 +63,37 @@ export default function AdminCurriculum() {
           <table className="w-full text-sm">
             <thead className="text-slate-400 border-b border-slate-800">
               <tr>
-                <th className="py-2 text-left">Curriculum</th>
                 <th className="py-2 text-left">Program</th>
-                <th className="py-2 text-left">Version</th>
-                <th className="py-2 text-left">Effective term</th>
-                <th className="py-2 text-left">Total units</th>
+                <th className="py-2 text-left">Start Year</th>
+                <th className="py-2 text-left">End Year</th>
+                <th className="py-2 text-left">Status</th>
                 <th className="py-2 text-left">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {portalData.curriculums.map((curriculum) => (
-                <tr key={curriculum.id} className="border-b border-slate-900/40 last:border-0">
-                  <td className="py-3 text-purple-200 font-medium">{curriculum.name}</td>
-                  <td className="py-3 text-slate-300">{programLookup[curriculum.programId]}</td>
-                  <td className="py-3 text-slate-300">{curriculum.version}</td>
-                  <td className="py-3 text-slate-300">{curriculum.effectiveTerm}</td>
-                  <td className="py-3 text-slate-300">{curriculum.totalUnits}</td>
+              {rows.map((r) => (
+                <tr key={r.id} className="border-b border-slate-900/40 last:border-0">
+                  <td className="py-3 text-purple-200 font-medium">{r.program?.name || `Program #${r.programId}`}</td>
+                  <td className="py-3 text-slate-300">{r.startYear}</td>
+                  <td className="py-3 text-slate-300">{r.endYear}</td>
+                  <td className="py-3 text-slate-300">{r.status}</td>
                   <td className="py-3">
                     <div className="flex gap-2">
-                      <button
-                        onClick={() => openModal(curriculum)}
-                        className="inline-flex items-center gap-1 rounded-lg border border-slate-700 px-3 py-1 text-xs text-slate-200 hover:border-purple-500/40"
-                      >
+                      <button onClick={() => openModal(r)} className="inline-flex items-center gap-1 rounded-lg border border-slate-700 px-3 py-1 text-xs text-slate-200 hover:border-purple-500/40">
                         <Pencil size={14} /> Edit
                       </button>
-                      <button
-                        onClick={() => deleteCurriculum(curriculum.id)}
-                        className="inline-flex items-center gap-1 rounded-lg border border-red-500/40 px-3 py-1 text-xs text-red-300 hover:bg-red-500/10"
-                      >
+                      <button onClick={async () => { await deleteCurriculum(token, r.id); await refresh(); }} className="inline-flex items-center gap-1 rounded-lg border border-red-500/40 px-3 py-1 text-xs text-red-300 hover:bg-red-500/10">
                         <Trash2 size={14} /> Remove
                       </button>
                     </div>
                   </td>
                 </tr>
               ))}
+              {rows.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="py-4 text-center text-slate-500">No curriculums found.</td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -127,68 +101,54 @@ export default function AdminCurriculum() {
 
       {isModalOpen && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 px-4">
-          <div className="w-full max-w-xl rounded-2xl border border-purple-500/40 bg-slate-950 p-6 shadow-2xl space-y-4">
-            <h2 className="text-lg font-semibold text-purple-200">
-              {editingId ? "Edit curriculum" : "Create curriculum"}
-            </h2>
-            <div className="grid gap-3 text-sm md:grid-cols-2">
-              <label className="block md:col-span-2">
-                <span className="text-slate-400">Curriculum name</span>
-                <input
-                  value={form.name}
-                  onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
-                  className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 focus:border-purple-500 focus:outline-none"
-                />
-              </label>
+          <div className="w-full max-w-md rounded-2xl border border-purple-500/40 bg-slate-950 p-6 shadow-2xl">
+            <h2 className="text-lg font-semibold text-purple-200 mb-4">{editingId ? "Edit curriculum" : "Create curriculum"}</h2>
+            <div className="space-y-3 text-sm">
               <label className="block">
                 <span className="text-slate-400">Program</span>
                 <select
                   value={form.programId}
-                  onChange={(event) => setForm((prev) => ({ ...prev, programId: event.target.value }))}
+                  onChange={(e) => setForm((p) => ({ ...p, programId: e.target.value }))}
                   className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 focus:border-purple-500 focus:outline-none"
                 >
-                  {portalData.programs.map((program) => (
-                    <option key={program.id} value={program.id}>
-                      {program.name}
-                    </option>
+                  {programs.map((p) => (
+                    <option key={p.id} value={p.id}>{p.code} {p.name}</option>
                   ))}
                 </select>
               </label>
+              <div className="grid grid-cols-2 gap-2">
+                <label className="block">
+                  <span className="text-slate-400">Start year</span>
+                  <input value={form.startYear} onChange={(e) => setForm((p) => ({ ...p, startYear: e.target.value }))} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 focus:border-purple-500 focus:outline-none" />
+                </label>
+                <label className="block">
+                  <span className="text-slate-400">End year</span>
+                  <input value={form.endYear} onChange={(e) => setForm((p) => ({ ...p, endYear: e.target.value }))} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 focus:border-purple-500 focus:outline-none" />
+                </label>
+              </div>
               <label className="block">
-                <span className="text-slate-400">Version</span>
-                <input
-                  value={form.version}
-                  onChange={(event) => setForm((prev) => ({ ...prev, version: event.target.value }))}
-                  className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 focus:border-purple-500 focus:outline-none"
-                />
-              </label>
-              <label className="block">
-                <span className="text-slate-400">Effective term</span>
-                <input
-                  value={form.effectiveTerm}
-                  onChange={(event) => setForm((prev) => ({ ...prev, effectiveTerm: event.target.value }))}
-                  className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 focus:border-purple-500 focus:outline-none"
-                />
-              </label>
-              <label className="block">
-                <span className="text-slate-400">Total units</span>
-                <input
-                  type="number"
-                  value={form.totalUnits}
-                  onChange={(event) => setForm((prev) => ({ ...prev, totalUnits: Number(event.target.value) }))}
-                  className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 focus:border-purple-500 focus:outline-none"
-                />
+                <span className="text-slate-400">Status</span>
+                <select value={form.status} onChange={(e) => setForm((p) => ({ ...p, status: e.target.value }))} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 focus:border-purple-500 focus:outline-none">
+                  <option value="active">active</option>
+                  <option value="archived">archived</option>
+                </select>
               </label>
             </div>
-            <div className="flex justify-end gap-2 text-sm">
+            <div className="mt-5 flex justify-end gap-2 text-sm">
+              <button onClick={closeModal} className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-slate-200 hover:border-purple-500/40">Cancel</button>
               <button
-                onClick={closeModal}
-                className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-slate-200 hover:border-purple-500/40"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={saveCurriculum}
+                onClick={async () => {
+                  const payload = {
+                    programId: Number(form.programId),
+                    startYear: Number(form.startYear),
+                    endYear: Number(form.endYear),
+                    status: form.status,
+                  };
+                  if (editingId) await updateCurriculum(token, editingId, payload);
+                  else await createCurriculum(token, payload);
+                  await refresh();
+                  closeModal();
+                }}
                 className="rounded-lg bg-gradient-to-r from-purple-600 via-purple-500 to-yellow-400 px-4 py-2 font-semibold text-slate-950 hover:from-purple-500 hover:via-purple-400 hover:to-yellow-300"
               >
                 Save changes
@@ -200,3 +160,4 @@ export default function AdminCurriculum() {
     </div>
   );
 }
+

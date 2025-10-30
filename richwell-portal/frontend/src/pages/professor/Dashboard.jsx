@@ -1,197 +1,133 @@
-import { useEffect, useMemo, useState } from "react";
-import { ClipboardSignature, Clock3, CheckCircle2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { BookOpen } from "lucide-react";
 import { useAuth } from "../../context/AuthContext.jsx";
-import { useToast } from "../../components/ToastProvider.jsx";
-
-const GRADE_OPTIONS = ["1.0", "1.25", "1.5", "1.75", "2.0", "2.25", "2.5", "2.75", "3.0", "4.0", "5.0", "INC", "DRP"];
+import { getMySections, getSectionRoster, encodeGrade } from "../../api/professor.js";
 
 export default function ProfessorDashboard() {
-  const toast = useToast();
-  const { user, portalData, updatePortalData } = useAuth();
-  const assignments = useMemo(
-    () => portalData.teachingAssignments.filter((assignment) => assignment.professorId === user?.id),
-    [portalData.teachingAssignments, user?.id]
-  );
-
-  const [selectedAssignmentId, setSelectedAssignmentId] = useState(assignments[0]?.id ?? "");
-  const activeAssignment = assignments.find((assignment) => assignment.id === selectedAssignmentId);
+  const { token } = useAuth();
+  const [sections, setSections] = useState([]);
+  const [activeSectionId, setActiveSectionId] = useState(null);
+  const [roster, setRoster] = useState([]);
   const [gradeMap, setGradeMap] = useState({});
 
   useEffect(() => {
-    if (!activeAssignment) return;
-    setGradeMap((prev) => {
-      const next = {};
-      activeAssignment.students.forEach((student) => {
-        next[student.studentId] = prev[student.studentId] ?? student.currentGrade ?? "";
-      });
-      return next;
-    });
-  }, [activeAssignment]);
-
-  const pendingSubmissions = portalData.gradeSubmissions.filter(
-    (submission) => submission.professorId === user?.id && submission.status === "Pending"
-  );
-
-  const approvedSubmissions = portalData.gradeSubmissions.filter(
-    (submission) => submission.professorId === user?.id && submission.status === "Approved"
-  );
-
-  const handleSubmit = () => {
-    if (!activeAssignment) {
-      toast.error("Select a class before submitting grades.");
-      return;
+    let cancelled = false;
+    async function load() {
+      if (!token) return;
+      try { const res = await getMySections(token); if (!cancelled) setSections(Array.isArray(res?.data) ? res.data : []); } catch {}
     }
-    const missing = activeAssignment.students.filter((student) => !gradeMap[student.studentId]);
-    if (missing.length > 0) {
-      toast.error("All students must have a grade before submission.");
-      return;
+    load();
+    return () => { cancelled = true; };
+  }, [token]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadRoster() {
+      if (!token || !activeSectionId) return;
+      try {
+        const res = await getSectionRoster(token, activeSectionId);
+        const list = Array.isArray(res?.data) ? res.data : [];
+        if (!cancelled) {
+          setRoster(list);
+          const next = {};
+          list.forEach((r) => { next[r.enrollmentSubjectId] = r.latestGrade || ""; });
+          setGradeMap(next);
+        }
+      } catch {}
     }
-
-    const submission = {
-      id: `SUB-${Date.now()}`,
-      professorId: user.id,
-      professorName: user.name,
-      subjectCode: activeAssignment.subjectCode,
-      subjectTitle: activeAssignment.subjectTitle,
-      section: activeAssignment.id,
-      term: activeAssignment.term,
-      status: "Pending",
-      submittedAt: new Date().toISOString(),
-      students: activeAssignment.students.map((student) => ({
-        ...student,
-        grade: gradeMap[student.studentId],
-      })),
-    };
-
-    updatePortalData((previous) => {
-      const next = JSON.parse(JSON.stringify(previous));
-      next.gradeSubmissions.push(submission);
-      next.gradeLogs.push({
-        id: submission.id,
-        action: "SUBMITTED",
-        actor: user.name,
-        subject: `${submission.subjectCode} • ${submission.section}`,
-        timestamp: submission.submittedAt,
-      });
-      return next;
-    });
-
-    toast.success("Grades submitted for registrar approval.");
-    setGradeMap({});
-  };
+    loadRoster();
+    return () => { cancelled = true; };
+  }, [token, activeSectionId]);
 
   return (
     <div className="space-y-6">
       <header className="space-y-1">
         <p className="text-xs uppercase tracking-[0.3em] text-purple-400">Professor workspace</p>
-        <h1 className="text-2xl font-semibold text-yellow-400">Encode term grades</h1>
-        <p className="text-sm text-slate-400">Select a section, assign grades, and forward them to the registrar with one click.</p>
+        <h1 className="text-2xl font-semibold text-yellow-400">My Sections</h1>
+        <p className="text-sm text-slate-400">View sections handled this term based on database records.</p>
       </header>
 
-      <section className="grid gap-4 md:grid-cols-[320px,1fr]">
-        <div className="space-y-4">
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
-            <h2 className="text-sm font-semibold text-slate-100">My classes</h2>
-            <p className="text-xs text-slate-500">Pick a section to start encoding grades.</p>
-            <div className="mt-3 space-y-2">
-              {assignments.map((assignment) => (
-                <button
-                  key={assignment.id}
-                  onClick={() => setSelectedAssignmentId(assignment.id)}
-                  className={`w-full rounded-xl border px-3 py-2 text-left text-sm transition ${
-                    assignment.id === selectedAssignmentId
-                      ? "border-purple-500 bg-purple-500/10 text-purple-100"
-                      : "border-slate-800 hover:border-purple-500/40"
-                  }`}
-                >
-                  <p className="font-medium">{assignment.subjectCode} · {assignment.subjectTitle}</p>
-                  <p className="text-xs text-slate-400">Section {assignment.id} · {assignment.term}</p>
-                </button>
+      <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5 space-y-4">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="text-slate-400 border-b border-slate-800">
+              <tr>
+                <th className="py-2 text-left">Section</th>
+                <th className="py-2 text-left">Subject</th>
+                <th className="py-2 text-left">Units</th>
+                <th className="py-2 text-left">Schedule</th>
+                <th className="py-2 text-left">Semester</th>
+                <th className="py-2 text-left">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sections.map((s) => (
+                <tr key={s.id} className="border-b border-slate-900/40 last:border-0">
+                  <td className="py-3 text-purple-200 font-medium">{s.name}</td>
+                  <td className="py-3 text-slate-300">{s.subject?.code} {s.subject?.name}</td>
+                  <td className="py-3 text-slate-300">{s.subject?.units}</td>
+                  <td className="py-3 text-slate-300">{s.schedule || "TBA"}</td>
+                  <td className="py-3 text-slate-300">{s.semester}</td>
+                  <td className="py-3"><button onClick={() => setActiveSectionId(s.id)} className="text-xs rounded-lg border border-slate-700 px-3 py-1 hover:border-purple-500/40">Open roster</button></td>
+                </tr>
               ))}
-              {assignments.length === 0 && (
-                <p className="text-xs text-slate-500 italic">No teaching assignments in this dataset.</p>
+              {sections.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="py-4 text-center text-slate-500">No sections assigned.</td>
+                </tr>
               )}
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 space-y-3 text-sm">
-            <InfoBadge icon={<Clock3 size={16} />} label="Pending" value={`${pendingSubmissions.length} submission(s)`} />
-            <InfoBadge icon={<CheckCircle2 size={16} />} label="Approved" value={`${approvedSubmissions.length} submission(s)`} />
-          </div>
+            </tbody>
+          </table>
         </div>
 
-        <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5 space-y-4">
-          {!activeAssignment ? (
-            <p className="text-sm text-slate-500 italic">Select a class from the left to start encoding.</p>
-          ) : (
-            <>
-              <header className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-lg font-semibold text-purple-300">{activeAssignment.subjectTitle}</h2>
-                  <p className="text-xs text-slate-500">Section {activeAssignment.id} · {activeAssignment.term}</p>
-                </div>
-                <span className="inline-flex items-center gap-2 rounded-full bg-purple-500/10 px-3 py-1 text-xs text-purple-200">
-                  <ClipboardSignature size={14} /> Grade Entry
-                </span>
-              </header>
-
-              <div className="overflow-x-auto rounded-xl border border-slate-800">
-                <table className="w-full text-sm">
-                  <thead className="bg-slate-950/60 text-slate-400">
-                    <tr>
-                      <th className="px-3 py-2 text-left">Student</th>
-                      <th className="px-3 py-2 text-left">Student ID</th>
-                      <th className="px-3 py-2 text-left">Grade</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {activeAssignment.students.map((student) => (
-                      <tr key={student.studentId} className="border-t border-slate-800">
-                        <td className="px-3 py-2 text-slate-100">{student.name}</td>
-                        <td className="px-3 py-2 text-slate-400">{student.studentId}</td>
-                        <td className="px-3 py-2">
+        {activeSectionId && (
+          <div className="rounded-xl border border-slate-800 p-4">
+            <h3 className="text-sm font-semibold text-slate-200 mb-3">Roster</h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="text-slate-400 border-b border-slate-800">
+                  <tr>
+                    <th className="py-2 text-left">Student No</th>
+                    <th className="py-2 text-left">Email</th>
+                    <th className="py-2 text-left">Latest Grade</th>
+                    <th className="py-2 text-left">Encode</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {roster.map((r) => (
+                    <tr key={r.enrollmentSubjectId} className="border-b border-slate-900/40 last:border-0">
+                      <td className="py-3 text-purple-200 font-medium">{r.studentNo}</td>
+                      <td className="py-3 text-slate-300">{r.studentEmail}</td>
+                      <td className="py-3 text-slate-300">{r.latestGrade || '—'}</td>
+                      <td className="py-3">
+                        <div className="flex items-center gap-2">
                           <select
-                            value={gradeMap[student.studentId] ?? ""}
-                            onChange={(event) =>
-                              setGradeMap((prev) => ({ ...prev, [student.studentId]: event.target.value }))
-                            }
-                            className="w-full rounded-lg border border-slate-700 bg-slate-950/60 px-2 py-2 text-sm focus:border-purple-500 focus:outline-none"
+                            value={gradeMap[r.enrollmentSubjectId] ?? ''}
+                            onChange={(e) => setGradeMap((p) => ({ ...p, [r.enrollmentSubjectId]: e.target.value }))}
+                            className="rounded-lg border border-slate-700 bg-slate-950/60 px-2 py-1 text-xs"
                           >
-                            <option value="" disabled>
-                              Select grade…
-                            </option>
-                            {GRADE_OPTIONS.map((option) => (
-                              <option key={option} value={option}>
-                                {option}
-                              </option>
+                            <option value="" disabled>Select</option>
+                            {['ONE_ZERO','ONE_TWENTYFIVE','ONE_FIVE','ONE_SEVENTYFIVE','TWO_ZERO','TWO_TWENTYFIVE','TWO_FIVE','TWO_SEVENTYFIVE','THREE_ZERO','FOUR_ZERO','FIVE_ZERO','INC','DRP'].map((g) => (
+                              <option key={g} value={g}>{g}</option>
                             ))}
                           </select>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              <button
-                onClick={handleSubmit}
-                className="w-full rounded-lg bg-gradient-to-r from-purple-600 via-purple-500 to-yellow-400 py-2 text-sm font-semibold text-slate-950 hover:from-purple-500 hover:via-purple-400 hover:to-yellow-300 transition"
-              >
-                Submit for registrar approval
-              </button>
-            </>
-          )}
-        </div>
+                          <button
+                            onClick={async () => { await encodeGrade(token, { enrollmentSubjectId: r.enrollmentSubjectId, gradeValue: gradeMap[r.enrollmentSubjectId] }); const res = await getSectionRoster(token, activeSectionId); setRoster(res?.data || []); }}
+                            className="text-xs rounded-lg bg-purple-600 hover:bg-purple-500 text-white px-2 py-1"
+                          >Submit</button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {roster.length === 0 && (
+                    <tr><td colSpan={4} className="py-4 text-center text-slate-500">No enrolled students.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </section>
-    </div>
-  );
-}
-
-function InfoBadge({ icon, label, value }) {
-  return (
-    <div className="rounded-xl border border-slate-800 bg-slate-900/40 px-3 py-2 flex items-center justify-between text-slate-300">
-      <span className="inline-flex items-center gap-2 text-xs text-slate-400">{icon} {label}</span>
-      <span className="text-sm font-semibold text-purple-200">{value}</span>
     </div>
   );
 }

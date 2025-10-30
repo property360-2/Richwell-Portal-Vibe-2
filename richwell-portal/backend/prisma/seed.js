@@ -524,6 +524,106 @@ async function main() {
   console.log('✅ Sections created');
 
   // ============================
+  // 10b. BSIS PROGRAM AND SUBJECTS + SECTIONS
+  // ============================
+  const bsis = await prisma.program.upsert({
+    where: { code: 'BSIS' },
+    update: {},
+    create: {
+      name: 'Bachelor of Science in Information Systems',
+      code: 'BSIS',
+      description: 'Four-year Information Systems program',
+      departmentId: ccseDept.id,
+      sectorId: undergrad.id
+    }
+  });
+
+  const bsisSubjectMeta = [
+    // 1st Year
+    { code: 'IS111', name: 'Introduction to Computing', units: 3, type: 'major', year: '1', sem: 'first', prereq: null },
+    { code: 'IS112', name: 'Computer Programming 1', units: 3, type: 'major', year: '1', sem: 'first', prereq: null },
+    { code: 'IS121', name: 'Computer Programming 2', units: 3, type: 'major', year: '1', sem: 'second', prereq: 'IS112' },
+    { code: 'GE-MATH', name: 'Mathematics in the Modern World', units: 3, type: 'minor', year: '1', sem: 'second', prereq: null },
+    // 2nd Year
+    { code: 'IS211', name: 'Database Management System', units: 3, type: 'major', year: '2', sem: 'first', prereq: 'IS121' },
+    { code: 'IS212', name: 'Web Systems and Technologies', units: 3, type: 'major', year: '2', sem: 'first', prereq: 'IS121' },
+    { code: 'STAT212', name: 'Statistics with Software Application', units: 3, type: 'minor', year: '2', sem: 'second', prereq: 'GE-MATH' },
+    { code: 'IS214', name: 'Systems Analysis and Design', units: 3, type: 'major', year: '2', sem: 'second', prereq: 'IS211' },
+    // 3rd Year
+    { code: 'IS311', name: 'Research Methods 1 (Thesis Proposal)', units: 3, type: 'major', year: '3', sem: 'first', prereq: 'IS214' },
+    { code: 'IS312', name: 'IS Project Management', units: 3, type: 'major', year: '3', sem: 'first', prereq: 'IS214' },
+    { code: 'IS322', name: 'Research Methods 2 (System Analysis & Design)', units: 3, type: 'major', year: '3', sem: 'second', prereq: 'IS311' },
+    // 4th Year
+    { code: 'IS411', name: 'Capstone Project 1 (System Development Phase)', units: 3, type: 'major', year: '4', sem: 'first', prereq: 'IS322' },
+    { code: 'IS422', name: 'Capstone Project 2 (Implementation & Defense)', units: 3, type: 'major', year: '4', sem: 'second', prereq: 'IS411' },
+  ];
+
+  const createdIS = {};
+  for (const s of bsisSubjectMeta) {
+    const row = await prisma.subject.upsert({
+      where: { code: s.code },
+      update: {},
+      create: {
+        code: s.code,
+        name: s.name,
+        units: s.units,
+        subjectType: s.type,
+        yearStanding: `${s.year}st Year`,
+        recommendedYear: s.year,
+        recommendedSemester: s.sem,
+        programId: bsis.id,
+        prerequisiteId: null,
+      }
+    });
+    createdIS[s.code] = row;
+  }
+
+  for (const s of bsisSubjectMeta) {
+    if (s.prereq) {
+      await prisma.subject.update({
+        where: { id: createdIS[s.code].id },
+        data: { prerequisiteId: createdIS[s.prereq]?.id || null }
+      });
+    }
+  }
+
+  const bsisSections = [
+    { code: 'IS111', name: 'IS111-A', profId: prof1.id, sem: 'first', sched: 'MWF 8:00-9:00 AM' },
+    { code: 'IS112', name: 'IS112-A', profId: prof1.id, sem: 'first', sched: 'MWF 9:00-10:00 AM' },
+    { code: 'IS121', name: 'IS121-A', profId: prof2.id, sem: 'second', sched: 'TTH 8:00-9:30 AM' },
+    { code: 'GE-MATH', name: 'GE-MATH-A', profId: prof3.id, sem: 'second', sched: 'TTH 10:00-11:30 AM' },
+    { code: 'IS211', name: 'IS211-A', profId: prof1.id, sem: 'first', sched: 'MWF 10:00-11:00 AM' },
+    { code: 'IS212', name: 'IS212-A', profId: prof2.id, sem: 'first', sched: 'MWF 1:00-2:00 PM' },
+    { code: 'STAT212', name: 'STAT212-A', profId: prof3.id, sem: 'second', sched: 'TTH 1:00-2:30 PM' },
+    { code: 'IS214', name: 'IS214-A', profId: prof2.id, sem: 'second', sched: 'TTH 2:30-4:00 PM' },
+    { code: 'IS311', name: 'IS311-A', profId: prof1.id, sem: 'first', sched: 'MWF 2:00-3:00 PM' },
+    { code: 'IS312', name: 'IS312-A', profId: prof2.id, sem: 'first', sched: 'MWF 3:00-4:00 PM' },
+    { code: 'IS322', name: 'IS322-A', profId: prof1.id, sem: 'second', sched: 'TTH 3:00-4:30 PM' },
+    { code: 'IS411', name: 'IS411-A', profId: prof2.id, sem: 'first', sched: 'SAT 9:00-12:00 PM' },
+    { code: 'IS422', name: 'IS422-A', profId: prof3.id, sem: 'second', sched: 'SAT 1:00-4:00 PM' },
+  ];
+
+  for (const s of bsisSections) {
+    await prisma.section.upsert({
+      where: { name: s.name },
+      update: {},
+      create: {
+        name: s.name,
+        subjectId: createdIS[s.code].id,
+        professorId: s.profId,
+        maxSlots: 40,
+        availableSlots: 40,
+        semester: s.sem,
+        schoolYear: '2024-2025',
+        schedule: s.sched,
+        status: 'open'
+      }
+    });
+  }
+
+  console.log('�o. BSIS program, subjects, and sections created');
+
+  // ============================
   // 11. SAMPLE APPLICANTS
   // ============================
   await prisma.applicant.create({
