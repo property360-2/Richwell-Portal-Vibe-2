@@ -130,71 +130,91 @@
 ### **3.1 Dashboard**
 
 * Header: “Welcome, Admission Officer [Name]!”
-
 * Quote section (motivational).
+* Summary Cards (auto-refresh when enrollment updates):
 
-* Summary Cards:
+  * 🧍‍♀️ Total Enrolled Students this Term
+  * 🆕 Newly Registered Students
+  * 📚 Average Units per Student
+  * 🚫 Sections at Full Capacity
 
-  * 🧾 Total Applicants
-  * ✅ Accepted Applicants
-  * ❌ Rejected Applicants
-  * ⏳ Pending Applications
-
-* Graph: “Applicants Over Time” (line chart).
-
----
-
-### **3.2 Student Account Creation / Enrollment Form**
-
-* **Form Fields:**
-
-  * Full Name
-  * Email Address
-  * Desired Program (Dropdown)
-  * Uploaded Requirements (multiple file upload with validation)
-* Buttons:
-
-  * **Submit** – saves new applicant record
-  * **Clear Form** – reset
-* Confirmation modal after submission: “Student application successfully recorded!”
+* Quick filters: Program, Year Level, Semester.
+* Chart: “Enrollment Trend by Program” (line + stacked bar toggle).
+* Table widget: “Sections Reaching Slot Limit” (shows section, subject, remaining slots).
 
 ---
 
-### **3.3 Students**
+### **3.2 Enrollment Workspace**
 
-* Table of Applicants Pending Review:
+**Single screen that powers all admission-side enrollment.**
 
-  | Applicant Name | Program | Submitted Docs | Status  | Actions                                  |
-  | -------------- | ------- | -------------- | ------- | ---------------------------------------- |
-  | Juan Dela Cruz | BSIS    | 5/6 uploaded   | Pending | **View (👁)** / **Approve** / **Reject** |
+* **Student Toggle:**
 
-* **View Modal:**
+  * 🆕 **New Student** – reveals a registration panel.
+  * 👩‍🎓 **Current Student** – enables search dropdown with autocomplete.
 
-  * Displays applicant info + uploaded documents (viewable).
-  * Button: **Confirm Create Student Account** (if accepted).
-  * Queue note: “This student was processed by Admission 1.”
+* **New Student Workflow:**
+
+  1. Fill out **Student Registration Form** (name, birthdate, contact, address, guardian info, program, year level, semester).
+  2. Upload optional supporting documents (ID, credentials).
+  3. Click **Create Student** → system generates Student ID, user account, and password setup link.
+  4. After save, form collapses and the Enrollment Form opens automatically for the newly created student.
+
+* **Current Student Workflow:**
+
+  1. Search and select an existing student (search by name, Student ID, or email).
+  2. System preloads profile summary (program, year level, status, remaining INC subjects).
+  3. Enrollment Form loads with auto-recommended subjects.
+
+* **Enrollment Form:**
+
+  * Recommended subjects listed first (program + semester mapping). Regular students are locked to this list.
+  * Retake tab shows eligible subjects tagged by repeat logic (auto-calculated availability).
+  * Manual subject picker for irregular students with filters (subject code, units, schedule).
+  * Each subject row shows section options with slot counts and schedule; full sections are hidden.
+  * Prerequisite warnings appear inline with tooltip details.
+  * Unit counter with progress ring (warns when exceeding recommended load).
+  * Action buttons: **Review Summary**, **Save Enrollment**, **Cancel**.
+
+* **Summary Modal:**
+
+  * Displays student info, selected subjects + sections, total units, fees placeholder.
+  * Includes confirmation checkbox (“I certify the above schedule was verified with the student”).
+  * Upon confirmation, updates student enrollment record, section slot counts, and dashboard stats.
 
 ---
 
-### **3.4 Manage Applicant Records**
+### **3.3 Repeat & Eligibility Monitor**
 
-* Table with search and pagination.
-* Can update applicant info, reassign to another program, or archive.
-* Status filter (Accepted, Rejected, Pending).
+* Focused list of students with pending INC/failed subjects.
+* Columns: Student, Subject, Grade, Date Encoded, Subject Type, Eligible On, Status.
+* Auto-highlights items that become eligible this term (green badge).
+* Quick actions:
+
+  * **Open in Enrollment** – jumps to Enrollment Workspace with student pre-selected.
+  * **View History** – modal showing previous attempts and completion notes.
 
 ---
 
-### **3.5 View Analytics (Business Intelligence)**
+### **3.4 Student Directory**
 
-* Filters: Term / Program / Department
+* Global search + filters (Program, Year Level, Status, Enrollment Term).
+* Table columns: Student ID, Name, Program, Year, Enrollment Status, Last Updated, Actions.
+* Action drawer: view profile, resend password setup link, print enrollment summary.
+
+---
+
+### **3.5 Analytics (Business Intelligence)**
+
+* Filters: Term / Program / Year Level / Section.
 * **Widgets & Charts:**
 
-  * Donut: Application Status (Pending, Accepted, Rejected)
-  * Bar: Applications per Program
-  * Line: Application Trends per Month
-  * Table: Conversion Rate (Applicants → Students)
-  * Card: Average Processing Time
-  * Card: Total Missing Documents
+  * Donut: Enrollment by Status (New, Continuing, Returned).
+  * Bar: Subjects with Highest Retake Counts.
+  * Line: Enrollment Completion Rate per Week.
+  * Table: Sections Near Capacity (sortable by remaining slots).
+  * Card: Total Retake Approvals this Term.
+  * Card: Average Processing Time per Enrollment Session.
 
 ---
 
