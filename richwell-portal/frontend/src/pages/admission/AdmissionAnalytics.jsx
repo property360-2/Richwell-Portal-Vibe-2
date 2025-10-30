@@ -1,116 +1,115 @@
-import { useEffect, useState } from "react";
 import SidebarLayout from "../../layouts/SidebarLayout";
-import api from "../../services/api";
-import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip as RTooltip, BarChart, Bar, XAxis, YAxis, LineChart, Line, CartesianGrid, Legend } from "recharts";
+import { usePortalDataStore } from "../../store/usePortalDataStore";
+import {
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+  Tooltip as RTooltip,
+  BarChart,
+  Bar,
+  XAxis,
+  CartesianGrid,
+  Legend,
+  LineChart,
+  Line,
+  YAxis,
+} from "recharts";
+
+const STATUS_COLORS = ["#F9D74C", "#6A1B9A", "#9575CD", "#FF8A80"];
 
 export default function AdmissionAnalytics() {
-  const [programs, setPrograms] = useState([]);
-  const [departments, setDepartments] = useState([]);
-  const [filters, setFilters] = useState({ term: "1st", programId: "", departmentId: "" });
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const { analytics } = usePortalDataStore((state) => ({ analytics: state.analytics }));
 
-  useEffect(() => {
-    Promise.all([api.get("/admin/programs"), api.get("/admin/departments")]).then(([p, d]) => {
-      setPrograms(p.data?.data || []);
-      setDepartments(d.data?.data || []);
-    });
-  }, []);
+  const admissionsStatus = [
+    { name: "Pending", value: 34 },
+    { name: "Accepted", value: 58 },
+    { name: "Rejected", value: 12 },
+    { name: "Deferred", value: 6 },
+  ];
 
-  useEffect(() => {
-    setLoading(true);
-    api
-      .get("/admin/analytics", { params: { term: filters.term, programId: filters.programId || undefined, departmentId: filters.departmentId || undefined } })
-      .then((res) => setData(res.data?.data || null))
-      .finally(() => setLoading(false));
-  }, [filters]);
+  const perProgram = analytics.programs.map((program) => ({ name: program.program, count: Math.round(program.headcount * 0.12) }));
+  const monthlyTrend = analytics.enrollment.map((row) => ({ term: row.term, count: row.new + Math.round(row.continuing * 0.1) }));
 
   return (
     <SidebarLayout>
-      <div className="flex items-center justify-between mb-4">
-        <h1 className="text-2xl font-semibold">Admission Analytics</h1>
-        <div className="flex items-center gap-2">
-          <select value={filters.term} onChange={(e) => setFilters((f) => ({ ...f, term: e.target.value }))} className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm">
-            <option>1st</option>
-            <option>2nd</option>
-            <option>Summer</option>
-          </select>
-          <select value={filters.departmentId} onChange={(e) => setFilters((f) => ({ ...f, departmentId: e.target.value }))} className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm">
-            <option value="">All Departments</option>
-            {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-          </select>
-          <select value={filters.programId} onChange={(e) => setFilters((f) => ({ ...f, programId: e.target.value }))} className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm">
-            <option value="">All Programs</option>
-            {programs.map((p) => <option key={p.id} value={p.id}>{p.code} — {p.name}</option>)}
-          </select>
-        </div>
-      </div>
+      <header className="mb-6">
+        <h1 className="text-2xl font-semibold text-purple-300">Admission Analytics</h1>
+        <p className="text-gray-400 text-sm">These charts reuse the same dummy data powering the admin dashboards.</p>
+      </header>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <Widget title="Application Status (Donut)">
-          {loading ? <Placeholder /> : (
-            <div className="h-64">
-              <ResponsiveContainer>
-                <PieChart>
-                  <Pie dataKey="value" data={Object.entries(data?.admissions || {}).map(([k,v])=>({ name:k, value:Number(v)}))} outerRadius={100} label>
-                    {Object.entries(data?.admissions || {}).map((_, idx)=> <Cell key={idx} fill={["#8b5cf6","#10b981","#ef4444","#f59e0b"][idx % 4]} />)}
-                  </Pie>
-                  <RTooltip />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-          )}
+      <section className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <Widget title="Application Status">
+          <div className="h-64">
+            <ResponsiveContainer>
+              <PieChart>
+                <Pie data={admissionsStatus} dataKey="value" nameKey="name" innerRadius={60} outerRadius={100} paddingAngle={4}>
+                  {admissionsStatus.map((entry, index) => (
+                    <Cell key={entry.name} fill={STATUS_COLORS[index % STATUS_COLORS.length]} />
+                  ))}
+                </Pie>
+                <RTooltip />
+                <Legend verticalAlign="bottom" align="center" wrapperStyle={{ color: "#EDE7F6", fontSize: 12 }} />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
         </Widget>
-        <Widget title="Applications per Program (Bar)">
-          {loading ? <Placeholder /> : (
-            <div className="h-64">
-              <ResponsiveContainer>
-                <BarChart data={(data?.perProgram||[]).map(r=>({ name: r.code, count: r.count }))}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" />
-                  <YAxis />
-                  <RTooltip />
-                  <Legend />
-                  <Bar dataKey="count" fill="#60a5fa" />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          )}
+
+        <Widget title="Applications per Program">
+          <div className="h-64">
+            <ResponsiveContainer>
+              <BarChart data={perProgram}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#2F1D4A" />
+                <XAxis dataKey="name" stroke="#B39DDB" fontSize={12} tickLine={false} axisLine={false} />
+                <YAxis stroke="#B39DDB" fontSize={12} tickLine={false} axisLine={false} />
+                <RTooltip contentStyle={{ background: "#201033", border: "1px solid #321B5F", borderRadius: 12, color: "#F5F3FF" }} />
+                <Bar dataKey="count" fill="#9575CD" radius={[6, 6, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
         </Widget>
-        <Widget title="Application Trends per Month (Line)">
-          {loading ? <Placeholder /> : (
-            <div className="h-64">
-              <ResponsiveContainer>
-                <LineChart data={(data?.trend||[]).map(r=>({ month: r.month, count: r.count }))}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="month" />
-                  <YAxis />
-                  <RTooltip />
-                  <Legend />
-                  <Line type="monotone" dataKey="count" stroke="#34d399" />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          )}
+
+        <Widget title="Application Trend">
+          <div className="h-64">
+            <ResponsiveContainer>
+              <LineChart data={monthlyTrend}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#2F1D4A" />
+                <XAxis dataKey="term" stroke="#B39DDB" fontSize={12} tickLine={false} axisLine={false} />
+                <YAxis stroke="#B39DDB" fontSize={12} tickLine={false} axisLine={false} />
+                <RTooltip contentStyle={{ background: "#201033", border: "1px solid #321B5F", borderRadius: 12, color: "#F5F3FF" }} />
+                <Line type="monotone" dataKey="count" stroke="#6A1B9A" strokeWidth={3} dot={{ fill: "#F9D74C" }} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
         </Widget>
-        <Widget title="Average Processing Time (Card)"><MiniCard value={data?.avgProcessing || "--"} /></Widget>
-        <Widget title="Total Missing Documents (Card)"><MiniCard value={data?.missingDocs || "--"} /></Widget>
-      </div>
+
+        <Widget title="Processing KPIs">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <MiniCard label="Avg. Processing" value="2.5 days" />
+            <MiniCard label="Docs Follow-ups" value="18" />
+            <MiniCard label="Scholarship Leads" value="12" />
+            <MiniCard label="Walk-ins this week" value="9" />
+          </div>
+        </Widget>
+      </section>
     </SidebarLayout>
   );
 }
 
 function Widget({ title, children }) {
   return (
-    <div className="bg-gray-800 border border-gray-700 rounded-xl p-5">
-      <h2 className="font-semibold text-purple-400 mb-3">{title}</h2>
+    <div className="bg-gray-900/60 border border-gray-800 rounded-2xl p-6 space-y-4">
+      <h2 className="text-lg font-semibold text-purple-300">{title}</h2>
       {children}
     </div>
   );
 }
 
-function Placeholder() { return <div className="h-48 bg-gray-900 rounded" />; }
-
-function MiniCard({ value }) {
-  return <div className="h-24 bg-gray-900 rounded grid place-items-center text-2xl font-bold">{value}</div>;
+function MiniCard({ label, value }) {
+  return (
+    <div className="rounded-xl border border-gray-800 bg-gray-900/70 px-4 py-6 text-center">
+      <p className="text-xs uppercase tracking-wide text-gray-400">{label}</p>
+      <p className="text-xl font-semibold text-purple-200 mt-1">{value}</p>
+    </div>
+  );
 }

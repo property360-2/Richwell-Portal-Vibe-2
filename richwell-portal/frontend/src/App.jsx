@@ -2,6 +2,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-d
 import { useAuthStore } from "./store/useAuthStore";
 import { useEffect } from "react";
 import { ToastProvider } from "./components/ToastProvider";
+import { usePortalDataStore } from "./store/usePortalDataStore";
 
 // Layouts
 import Login from "./pages/auth/Login";
@@ -32,11 +33,12 @@ function ProtectedRoute({ children, role }) {
 
 export default function App() {
   const loadUser = useAuthStore((s) => s.loadUser);
+  const hydrate = usePortalDataStore((s) => s.hydrate);
 
   useEffect(() => {
+    hydrate();
     loadUser();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [hydrate, loadUser]);
 
   return (
     <ToastProvider>

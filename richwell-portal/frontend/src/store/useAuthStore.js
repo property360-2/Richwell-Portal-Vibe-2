@@ -1,5 +1,7 @@
 import { create } from "zustand";
-import axios from "axios";
+import { usePortalDataStore } from "./usePortalDataStore";
+
+const SESSION_KEY = "richwell-portal-session";
 
 export const useAuthStore = create((set) => ({
   user: null,
@@ -8,44 +10,52 @@ export const useAuthStore = create((set) => ({
   error: null,
   initialized: false,
 
-  // --- LOGIN ---
-  login: async (email, password) => {
+  login: async (email, password, role) => {
+    set({ loading: true, error: null });
     try {
-      set({ loading: true, error: null });
-      const res = await axios.post("http://localhost:5000/api/auth/login", {
-        email,
-        password,
-      });
-      const { user, token } = res.data;
-      localStorage.setItem("token", token);
-      set({ user, token, loading: false, initialized: true });
+      const authenticate = usePortalDataStore.getState().authenticate;
+      const user = authenticate(email, password, role);
+      if (!user) {
+        set({ loading: false, error: "Invalid credentials" });
+        return null;
+      }
+      const session = { userId: user.id, issuedAt: Date.now() };
+      window.localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+      set({ user, token: session.userId, loading: false, initialized: true });
+      return user;
     } catch (err) {
-      set({
-        error: err.response?.data?.message || "Login failed",
-        loading: false,
-      });
+      console.error("Failed to login", err);
+      set({ loading: false, error: "Login failed" });
+      return null;
     }
   },
 
-  // --- LOGOUT ---
   logout: () => {
-    localStorage.removeItem("token");
+    window.localStorage.removeItem(SESSION_KEY);
     set({ user: null, token: null, initialized: true });
   },
 
-  // --- LOAD FROM LOCAL STORAGE ---
-  loadUser: async () => {
-    const token = localStorage.getItem("token");
-    if (!token) {
-      set({ initialized: true, user: null, token: null });
-      return;
-    }
+  loadUser: () => {
+    const hydrate = usePortalDataStore.getState().hydrate;
+    hydrate();
     try {
-      const res = await axios.get("http://localhost:5000/api/auth/me", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      set({ user: res.data, token, initialized: true });
-    } catch {
+      const raw = window.localStorage.getItem(SESSION_KEY);
+      if (!raw) {
+        set({ user: null, token: null, initialized: true });
+        return;
+      }
+      const session = JSON.parse(raw);
+      const user = usePortalDataStore
+        .getState()
+        .users.find((u) => u.id === session.userId);
+      if (!user) {
+        window.localStorage.removeItem(SESSION_KEY);
+        set({ user: null, token: null, initialized: true });
+        return;
+      }
+      set({ user, token: session.userId, initialized: true });
+    } catch (err) {
+      console.error("Failed to restore session", err);
       set({ user: null, token: null, initialized: true });
     }
   },
