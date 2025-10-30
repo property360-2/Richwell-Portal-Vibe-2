@@ -28,27 +28,42 @@
 
 ### 📝 **B. Enrollment Management**
 
-#### Flow:
+#### Flow (Admission-Driven):
 
-1. **Registrar** creates sections (linked to professors, subjects, slots)
-2. **Admission** opens enrollment UI
-3. **Applicant/Student**:
+1. **Registrar** prepares subjects and sections (professor, schedule, slot limit).
+2. **Admission Officer** opens the **Enrollment Workspace**.
+3. Officer toggles between **New Student** and **Current Student** modes:
 
-   * Fills form
-   * Auto-recommended subjects per sem
-   * Can add subjects (≤30 units)
-   * System validates prerequisites + INCs
-   * Shows available sections with slots
-   * Modal summary → oath modal → confirm
-   * If new student → generates Student ID + password setup
-4. **Admission Dashboard** updates summary analytics automatically
+   * **New Student:**
 
-#### Rules:
+     1. Completes the Student Registration Form (personal info, contact, program, year, semester, guardian details).
+     2. Saves record → system creates user + student entries, assigns Student ID, and emails password setup link.
+     3. Enrollment Form auto-opens for the newly created student.
 
-* INC or failed prerequisite → cannot enroll related subject
-* INC last sem (core subject) → blocks related subject
-* Slot limit per section (updates dynamically)
-* Regular = choose section; Irregular = choose subject per section
+   * **Current Student:**
+
+     1. Searches existing student by name/ID/email and selects them.
+     2. System loads profile snapshot and recommended subjects.
+
+4. Officer reviews the **Enrollment Form**:
+
+   * Recommended tab pre-selects subjects based on program, year, and semester.
+   * Retake tab displays subjects unlocked by repeat eligibility logic.
+   * Manual selection tab (irregular students) lists all available subjects with section + slot info.
+   * Inline prerequisite alerts and slot counters prevent invalid choices.
+   * Unit tracker prevents overloading (warning threshold at 30 units).
+
+5. Officer opens **Summary Modal**, confirms selections, and finalizes enrollment.
+6. System updates admission dashboard metrics, student enrollment history, and section slot counts in real time.
+
+#### Rules & Validations:
+
+* INC/failed prerequisites → hide or lock dependent subjects.
+* Slot limits → full sections hidden from selection.
+* **Regular students** → limited to recommended subjects only.
+* **Irregular students** → can pick manual subjects within eligibility rules.
+* Repeat eligibility auto-calculated (major: 6 months, minor: 12 months) before showing in retake tab.
+* No applicant portal; all registration and enrollment tasks are completed by Admission staff.
 
 ---
 
