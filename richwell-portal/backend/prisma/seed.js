@@ -226,6 +226,17 @@ async function main() {
     }
   });
 
+  const student3User = await prisma.user.upsert({
+    where: { email: 'kyle.chan@student.richwell.edu' },
+    update: {},
+    create: {
+      email: 'kyle.chan@student.richwell.edu',
+      password: hashedPassword,
+      roleId: roles.find(r => r.name === 'student').id,
+      status: 'active'
+    }
+  });
+
   console.log('✅ Users created');
 
   // ============================
@@ -289,6 +300,20 @@ async function main() {
       status: 'irregular',
       gpa: 2.75,
       hasInc: true
+    }
+  });
+
+  const student3 = await prisma.student.upsert({
+    where: { studentNo: '2022-00088' },
+    update: {},
+    create: {
+      userId: student3User.id,
+      studentNo: '2022-00088',
+      programId: bscs.id,
+      yearLevel: 2,
+      status: 'regular',
+      gpa: 1.85,
+      hasInc: false
     }
   });
 
@@ -409,13 +434,65 @@ async function main() {
     }
   });
 
+  const cs201 = await prisma.subject.upsert({
+    where: { code: 'CS201' },
+    update: {},
+    create: {
+      code: 'CS201',
+      name: 'Object-Oriented Programming',
+      units: 3,
+      subjectType: 'major',
+      yearStanding: '2nd Year',
+      recommendedYear: '2',
+      recommendedSemester: 'first',
+      programId: bscs.id,
+      prerequisiteId: cs103.id
+    }
+  });
+
+  const cs202 = await prisma.subject.upsert({
+    where: { code: 'CS202' },
+    update: {},
+    create: {
+      code: 'CS202',
+      name: 'Algorithms Analysis',
+      units: 3,
+      subjectType: 'major',
+      yearStanding: '2nd Year',
+      recommendedYear: '2',
+      recommendedSemester: 'first',
+      programId: bscs.id,
+      prerequisiteId: cs104.id
+    }
+  });
+
+  const stat201 = await prisma.subject.upsert({
+    where: { code: 'STAT201' },
+    update: {},
+    create: {
+      code: 'STAT201',
+      name: 'Statistics for Computing',
+      units: 3,
+      subjectType: 'minor',
+      yearStanding: '2nd Year',
+      recommendedYear: '2',
+      recommendedSemester: 'first',
+      programId: bscs.id,
+      prerequisiteId: null
+    }
+  });
+
+  createdSubjects['CS201'] = cs201;
+  createdSubjects['CS202'] = cs202;
+  createdSubjects['STAT201'] = stat201;
+
   console.log('✅ Subjects created');
 
   // ============================
   // 9. ACADEMIC TERM
   // ============================
   const activeTerm = await prisma.academicTerm.upsert({
-    where: { 
+    where: {
       id: 1 // Use a specific ID or create unique constraint
     },
     update: {
@@ -428,7 +505,19 @@ async function main() {
     }
   });
 
-  console.log('✅ Academic term created');
+  const previousTerm = await prisma.academicTerm.upsert({
+    where: {
+      id: 2
+    },
+    update: {},
+    create: {
+      schoolYear: '2023-2024',
+      semester: 'second',
+      isActive: false
+    }
+  });
+
+  console.log('✅ Academic terms created');
 
   // ============================
   // 10. SECTIONS (First Semester)
@@ -439,18 +528,29 @@ async function main() {
       subjectId: createdSubjects['CS101'].id,
       professorId: prof1.id,
       maxSlots: 40,
-      availableSlots: 40,
+      availableSlots: 38,
       semester: 'first',
       schoolYear: '2024-2025',
       schedule: 'MWF 8:00-9:00 AM',
       status: 'open'
     },
     {
+      name: 'CS101-B',
+      subjectId: createdSubjects['CS101'].id,
+      professorId: prof2.id,
+      maxSlots: 40,
+      availableSlots: 0,
+      semester: 'first',
+      schoolYear: '2024-2025',
+      schedule: 'MWF 1:00-2:00 PM',
+      status: 'closed'
+    },
+    {
       name: 'CS102-A',
       subjectId: createdSubjects['CS102'].id,
       professorId: prof1.id,
       maxSlots: 40,
-      availableSlots: 40,
+      availableSlots: 39,
       semester: 'first',
       schoolYear: '2024-2025',
       schedule: 'MWF 9:00-10:00 AM',
@@ -472,7 +572,7 @@ async function main() {
       subjectId: createdSubjects['MATH101'].id,
       professorId: prof2.id,
       maxSlots: 45,
-      availableSlots: 45,
+      availableSlots: 44,
       semester: 'first',
       schoolYear: '2024-2025',
       schedule: 'MWF 10:00-11:00 AM',
@@ -483,7 +583,7 @@ async function main() {
       subjectId: createdSubjects['ENG101'].id,
       professorId: prof3.id,
       maxSlots: 35,
-      availableSlots: 35,
+      availableSlots: 33,
       semester: 'first',
       schoolYear: '2024-2025',
       schedule: 'TTH 8:00-9:30 AM',
@@ -494,7 +594,7 @@ async function main() {
       subjectId: createdSubjects['PE101'].id,
       professorId: prof3.id,
       maxSlots: 50,
-      availableSlots: 50,
+      availableSlots: 48,
       semester: 'first',
       schoolYear: '2024-2025',
       schedule: 'SAT 7:00-9:00 AM',
@@ -505,26 +605,325 @@ async function main() {
       subjectId: createdSubjects['NSTP101'].id,
       professorId: prof3.id,
       maxSlots: 45,
-      availableSlots: 45,
+      availableSlots: 43,
       semester: 'first',
       schoolYear: '2024-2025',
       schedule: 'SAT 9:00-12:00 PM',
       status: 'open'
+    },
+    {
+      name: 'CS103-A',
+      subjectId: cs103.id,
+      professorId: prof1.id,
+      maxSlots: 40,
+      availableSlots: 40,
+      semester: 'second',
+      schoolYear: '2024-2025',
+      schedule: 'MWF 8:00-9:00 AM',
+      status: 'open'
+    },
+    {
+      name: 'CS104-A',
+      subjectId: cs104.id,
+      professorId: prof2.id,
+      maxSlots: 35,
+      availableSlots: 35,
+      semester: 'second',
+      schoolYear: '2024-2025',
+      schedule: 'MWF 9:00-10:00 AM',
+      status: 'open'
+    },
+    {
+      name: 'CS201-A',
+      subjectId: cs201.id,
+      professorId: prof1.id,
+      maxSlots: 40,
+      availableSlots: 38,
+      semester: 'first',
+      schoolYear: '2024-2025',
+      schedule: 'MWF 1:00-2:00 PM',
+      status: 'open'
+    },
+    {
+      name: 'CS202-A',
+      subjectId: cs202.id,
+      professorId: prof2.id,
+      maxSlots: 40,
+      availableSlots: 39,
+      semester: 'first',
+      schoolYear: '2024-2025',
+      schedule: 'MWF 2:00-3:00 PM',
+      status: 'open'
+    },
+    {
+      name: 'STAT201-A',
+      subjectId: stat201.id,
+      professorId: prof3.id,
+      maxSlots: 45,
+      availableSlots: 45,
+      semester: 'first',
+      schoolYear: '2024-2025',
+      schedule: 'TTH 3:00-4:30 PM',
+      status: 'open'
+    },
+    {
+      name: 'CS103-2023',
+      subjectId: cs103.id,
+      professorId: prof1.id,
+      maxSlots: 35,
+      availableSlots: 20,
+      semester: 'second',
+      schoolYear: '2023-2024',
+      schedule: 'MWF 1:00-2:00 PM',
+      status: 'open'
+    },
+    {
+      name: 'ENG101-2023',
+      subjectId: createdSubjects['ENG101'].id,
+      professorId: prof3.id,
+      maxSlots: 30,
+      availableSlots: 5,
+      semester: 'second',
+      schoolYear: '2023-2024',
+      schedule: 'TTH 1:00-2:30 PM',
+      status: 'open'
+    },
+    {
+      name: 'CS103-RET',
+      subjectId: cs103.id,
+      professorId: prof2.id,
+      maxSlots: 25,
+      availableSlots: 25,
+      semester: 'first',
+      schoolYear: '2024-2025',
+      schedule: 'SAT 1:00-4:00 PM',
+      status: 'open'
+    },
+    {
+      name: 'ENG101-RET',
+      subjectId: createdSubjects['ENG101'].id,
+      professorId: prof3.id,
+      maxSlots: 25,
+      availableSlots: 15,
+      semester: 'first',
+      schoolYear: '2024-2025',
+      schedule: 'SAT 10:00-12:00 PM',
+      status: 'open'
     }
   ];
 
+  const sectionMap = {};
   for (const sec of sections) {
-    await prisma.section.upsert({
+    const section = await prisma.section.upsert({
       where: { name: sec.name },
       update: {},
       create: sec
     });
+    sectionMap[sec.name] = section;
   }
 
   console.log('✅ Sections created');
 
   // ============================
-  // 11. SAMPLE APPLICANTS
+  // 11. SAMPLE ENROLLMENTS & GRADES
+  // ============================
+  const student1Enrollment = await prisma.enrollment.upsert({
+    where: {
+      studentId_termId: {
+        studentId: student1.id,
+        termId: activeTerm.id
+      }
+    },
+    update: {},
+    create: {
+      studentId: student1.id,
+      termId: activeTerm.id,
+      status: 'confirmed',
+      totalUnits: 17,
+      subjects: {
+        create: [
+          {
+            sectionId: sectionMap['CS101-A'].id,
+            subjectId: createdSubjects['CS101'].id,
+            units: createdSubjects['CS101'].units
+          },
+          {
+            sectionId: sectionMap['CS102-A'].id,
+            subjectId: createdSubjects['CS102'].id,
+            units: createdSubjects['CS102'].units
+          },
+          {
+            sectionId: sectionMap['MATH101-A'].id,
+            subjectId: createdSubjects['MATH101'].id,
+            units: createdSubjects['MATH101'].units
+          },
+          {
+            sectionId: sectionMap['ENG101-A'].id,
+            subjectId: createdSubjects['ENG101'].id,
+            units: createdSubjects['ENG101'].units
+          },
+          {
+            sectionId: sectionMap['PE101-A'].id,
+            subjectId: createdSubjects['PE101'].id,
+            units: createdSubjects['PE101'].units
+          },
+          {
+            sectionId: sectionMap['NSTP101-A'].id,
+            subjectId: createdSubjects['NSTP101'].id,
+            units: createdSubjects['NSTP101'].units
+          }
+        ]
+      }
+    },
+    include: { subjects: true }
+  });
+
+  const student2PreviousEnrollment = await prisma.enrollment.upsert({
+    where: {
+      studentId_termId: {
+        studentId: student2.id,
+        termId: previousTerm.id
+      }
+    },
+    update: {},
+    create: {
+      studentId: student2.id,
+      termId: previousTerm.id,
+      status: 'confirmed',
+      totalUnits: 6,
+      subjects: {
+        create: [
+          {
+            sectionId: sectionMap['CS103-2023'].id,
+            subjectId: cs103.id,
+            units: cs103.units
+          },
+          {
+            sectionId: sectionMap['ENG101-2023'].id,
+            subjectId: createdSubjects['ENG101'].id,
+            units: createdSubjects['ENG101'].units
+          }
+        ]
+      }
+    },
+    include: { subjects: true }
+  });
+
+  const student2CurrentEnrollment = await prisma.enrollment.upsert({
+    where: {
+      studentId_termId: {
+        studentId: student2.id,
+        termId: activeTerm.id
+      }
+    },
+    update: {},
+    create: {
+      studentId: student2.id,
+      termId: activeTerm.id,
+      status: 'pending',
+      totalUnits: 6,
+      subjects: {
+        create: [
+          {
+            sectionId: sectionMap['CS103-RET'].id,
+            subjectId: cs103.id,
+            units: cs103.units
+          },
+          {
+            sectionId: sectionMap['ENG101-RET'].id,
+            subjectId: createdSubjects['ENG101'].id,
+            units: createdSubjects['ENG101'].units
+          }
+        ]
+      }
+    },
+    include: { subjects: true }
+  });
+
+  const student3Enrollment = await prisma.enrollment.upsert({
+    where: {
+      studentId_termId: {
+        studentId: student3.id,
+        termId: activeTerm.id
+      }
+    },
+    update: {},
+    create: {
+      studentId: student3.id,
+      termId: activeTerm.id,
+      status: 'confirmed',
+      totalUnits: 9,
+      subjects: {
+        create: [
+          {
+            sectionId: sectionMap['CS201-A'].id,
+            subjectId: cs201.id,
+            units: cs201.units
+          },
+          {
+            sectionId: sectionMap['CS202-A'].id,
+            subjectId: cs202.id,
+            units: cs202.units
+          },
+          {
+            sectionId: sectionMap['STAT201-A'].id,
+            subjectId: stat201.id,
+            units: stat201.units
+          }
+        ]
+      }
+    },
+    include: { subjects: true }
+  });
+
+  const cs103PreviousSubject = student2PreviousEnrollment.subjects.find(
+    subj => subj.subjectId === cs103.id
+  );
+  if (cs103PreviousSubject) {
+    const existingGrade = await prisma.grade.findFirst({
+      where: { enrollmentSubjectId: cs103PreviousSubject.id }
+    });
+    if (!existingGrade) {
+      await prisma.grade.create({
+        data: {
+          enrollmentSubjectId: cs103PreviousSubject.id,
+          gradeValue: 'INC',
+          remarks: 'Project pending completion',
+          encodedById: prof1.id,
+          approved: false,
+          dateEncoded: new Date('2023-10-15T00:00:00.000Z'),
+          repeatEligibleDate: new Date('2024-04-15T00:00:00.000Z')
+        }
+      });
+    }
+  }
+
+  const eng101PreviousSubject = student2PreviousEnrollment.subjects.find(
+    subj => subj.subjectId === createdSubjects['ENG101'].id
+  );
+  if (eng101PreviousSubject) {
+    const existingGrade = await prisma.grade.findFirst({
+      where: { enrollmentSubjectId: eng101PreviousSubject.id }
+    });
+    if (!existingGrade) {
+      await prisma.grade.create({
+        data: {
+          enrollmentSubjectId: eng101PreviousSubject.id,
+          gradeValue: 'FIVE_ZERO',
+          remarks: 'Failed to meet requirements',
+          encodedById: prof3.id,
+          approved: false,
+          dateEncoded: new Date('2023-03-01T00:00:00.000Z'),
+          repeatEligibleDate: new Date('2024-03-01T00:00:00.000Z')
+        }
+      });
+    }
+  }
+
+  console.log('✅ Sample enrollments and grades created');
+
+  // ============================
+  // 12. SAMPLE APPLICANTS
   // ============================
   await prisma.applicant.create({
     data: {
@@ -556,6 +955,7 @@ async function main() {
   console.log('👤 Professor:  prof.santos@richwell.edu');
   console.log('👤 Student 1:  juan.delacruz@student.richwell.edu');
   console.log('👤 Student 2:  maria.santos@student.richwell.edu');
+  console.log('👤 Student 3:  kyle.chan@student.richwell.edu');
   console.log('🔑 Password (all): password123');
   console.log('─────────────────────────────────────────\n');
 }
